@@ -56,6 +56,16 @@ Open-source, self-hosted note-taking tool built for quick capture. Markdown-nati
 - **Radical Simplicity** — Single Go binary, ~20MB Docker image. One command to deploy with SQLite, MySQL, or PostgreSQL.
 - **Open & Extensible** — MIT-licensed with full REST and gRPC APIs for integration.
 
+## 🚀 Custom Modules (This Fork)
+
+This fork includes several advanced productivity and financial tracking modules:
+
+- **[NEW] Cashflow Tracker (Thu Chi)** — Integrated income and expense tracking with smart category detection.
+- **[NEW] Debt Manager (Công Nợ)** — Track receivable and payable debts, with person-based balances and overdue alerts.
+- **[NEW] Asset Manager (Kho Hàng)** — Inventory and asset management system.
+- **[NEW] Smart Auto-Tag Engine** — Real-time tag suggestions based on content analysis (Lương, Thưởng, Cà phê, Ăn uống, etc.).
+- **[NEW] Disaster Recovery Guide** — See [`docs/recovery_guide.md`](file:///d:/00_Code/memos/docs/recovery_guide.md) for reconstruction steps.
+
 ## Quick Start
 
 ### Docker (Recommended)

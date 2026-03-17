@@ -27,3 +27,10 @@ dist
 
 # Git worktrees
 .worktrees/
+
+# Local binaries
+memos.exe
+memos_custom.tar
+web/src/d:
+/scripts/Dockerfile
+/scripts/entrypoint.sh

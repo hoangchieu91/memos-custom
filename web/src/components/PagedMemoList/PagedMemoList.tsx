@@ -1,6 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowUpIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { matchPath } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { userServiceClient } from "@/connect";
@@ -11,8 +10,8 @@ import { userKeys } from "@/hooks/useUserQueries";
 import { Routes } from "@/router";
 import { State } from "@/types/proto/api/v1/common_pb";
 import type { Memo } from "@/types/proto/api/v1/memo_service_pb";
-import { useTranslate } from "@/utils/i18n";
-import Empty from "../Empty";
+
+// Removed useTranslate as it's no longer used
 import type { MemoRenderContext } from "../MasonryView";
 import MasonryView from "../MasonryView";
 import MemoEditor from "../MemoEditor";
@@ -82,7 +81,6 @@ function useAutoFetchWhenNotScrollable({
 }
 
 const PagedMemoList = (props: Props) => {
-  const t = useTranslate();
   const { layout } = useView();
   const queryClient = useQueryClient();
 
@@ -103,7 +101,11 @@ const PagedMemoList = (props: Props) => {
   const memos = useMemo(() => data?.pages.flatMap((page) => page.memos) || [], [data]);
 
   // Apply custom sorting if provided, otherwise use memos directly
-  const sortedMemoList = useMemo(() => (props.listSort ? props.listSort(memos) : memos), [memos, props.listSort]);
+  // REVERSE THE LIST FOR CHAT UI (Newest at bottom)
+  const sortedMemoList = useMemo(() => {
+    const list = props.listSort ? props.listSort(memos) : memos;
+    return list.slice().reverse();
+  }, [memos, props.listSort]);
 
   // Prefetch creators when new data arrives to improve performance
   useEffect(() => {
@@ -133,13 +135,13 @@ const PagedMemoList = (props: Props) => {
     onFetchNext: fetchNextPage,
   });
 
-  // Infinite scroll: fetch more when user scrolls near bottom
+  // Infinite scroll: fetch more when user scrolls near TOP (for chat layout)
   useEffect(() => {
     if (!hasNextPage) return;
 
     const handleScroll = () => {
-      const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 300;
-      if (nearBottom && !isFetchingNextPage) {
+      const nearTop = window.scrollY <= 300;
+      if (nearTop && !isFetchingNextPage) {
         fetchNextPage();
       }
     };
@@ -148,85 +150,47 @@ const PagedMemoList = (props: Props) => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  // Auto-scroll to bottom on initial load (Page 1)
+  useEffect(() => {
+    if (sortedMemoList.length > 0 && data?.pages?.length === 1 && !isFetchingNextPage) {
+      const isMobile = window.innerWidth <= 768;
+      setTimeout(() => {
+         window.scrollTo({ top: document.body.scrollHeight, behavior: isMobile ? 'auto' : 'smooth' });
+      }, 300);
+    }
+  }, [sortedMemoList.length, data?.pages?.length, isFetchingNextPage]);
+
   const children = (
-    <div className="flex flex-col justify-start items-start w-full max-w-full">
+    <div className="flex flex-col justify-start items-start w-full max-w-full pb-8">
       {/* Show skeleton loader during initial load */}
       {isLoading ? (
         <Skeleton showCreator={props.showCreator} count={4} />
       ) : (
         <>
+          {/* LOAD MORE TOP: Loading indicator for pagination (Chat style) */}
+          <div className="w-full flex justify-center items-center py-4 mb-4 border-b border-gray-100 dark:border-gray-800">
+            {isFetchingNextPage ? (
+               <Skeleton showCreator={props.showCreator} count={2} />
+            ) : hasNextPage ? (
+               <Button variant="ghost" onClick={() => fetchNextPage()}>Tải thêm lịch sử</Button>
+            ) : (
+               <span className="text-muted-foreground text-sm opacity-50">Hết dữ liệu lịch sử</span>
+            )}
+          </div>
+
           <MasonryView
             memoList={sortedMemoList}
             renderer={props.renderer}
-            prefixElement={
-              <>
-                {showMemoEditor ? (
-                  <MemoEditor className="mb-2" cacheKey="home-memo-editor" placeholder={t("editor.any-thoughts")} />
-                ) : undefined}
-                <MemoFilters />
-              </>
-            }
+            prefixElement={<MemoFilters />}
             listMode={layout === "LIST"}
           />
-
-          {/* Loading indicator for pagination */}
-          {isFetchingNextPage && <Skeleton showCreator={props.showCreator} count={2} />}
-
-          {/* Empty state or back-to-top button */}
-          {!isFetchingNextPage && (
-            <>
-              {!hasNextPage && sortedMemoList.length === 0 ? (
-                <div className="w-full mt-12 mb-8 flex flex-col justify-center items-center italic">
-                  <Empty />
-                  <p className="mt-2 text-muted-foreground">{t("message.no-data")}</p>
-                </div>
-              ) : (
-                <div className="w-full opacity-70 flex flex-row justify-center items-center my-4">
-                  <BackToTop />
-                </div>
-              )}
-            </>
-          )}
+        
         </>
       )}
     </div>
   );
 
   return children;
-};
-
-const BackToTop = () => {
-  const t = useTranslate();
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const shouldShow = window.scrollY > 400;
-      setIsVisible(shouldShow);
-    };
-
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  const scrollToTop = () => {
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  };
-
-  // Don't render if not visible
-  if (!isVisible) {
-    return null;
-  }
-
-  return (
-    <Button variant="ghost" onClick={scrollToTop}>
-      {t("router.back-to-top")}
-      <ArrowUpIcon className="ml-1 w-4 h-auto" />
-    </Button>
-  );
 };
 
 export default PagedMemoList;

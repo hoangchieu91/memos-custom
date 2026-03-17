@@ -5,6 +5,8 @@ import { useUser } from "@/hooks/useUserQueries";
 import { cn } from "@/lib/utils";
 import { State } from "@/types/proto/api/v1/common_pb";
 import { isSuperUser } from "@/utils/user";
+import AiMagicButton from "../AiMagicButton";
+import SwipeableMemoCard from "../SwipeableMemoCard";
 import MemoEditor from "../MemoEditor";
 import PreviewImageDialog from "../PreviewImageDialog";
 import { MemoBody, MemoCommentListView, MemoHeader } from "./components";
@@ -76,7 +78,7 @@ const MemoView: React.FC<MemoViewProps> = (props: MemoViewProps) => {
 
   const article = (
     <article
-      className={cn(MEMO_CARD_BASE_CLASSES, showCommentPreview ? "mb-0 rounded-b-none" : "mb-2", className)}
+      className={cn(MEMO_CARD_BASE_CLASSES, "group", showCommentPreview ? "mb-0 rounded-b-none" : "mb-2", className)}
       ref={cardRef}
       tabIndex={readonly ? -1 : 0}
     >
@@ -96,6 +98,11 @@ const MemoView: React.FC<MemoViewProps> = (props: MemoViewProps) => {
         onToggleNsfwVisibility={toggleNsfwVisibility}
       />
 
+      {/* AI Magic Button — hover to reveal */}
+      <div className="flex items-center justify-end px-1">
+        <AiMagicButton content={memoData.content} memoName={memoData.name} />
+      </div>
+
       <PreviewImageDialog
         open={previewState.open}
         onOpenChange={setPreviewOpen}
@@ -107,14 +114,16 @@ const MemoView: React.FC<MemoViewProps> = (props: MemoViewProps) => {
 
   return (
     <MemoViewContext.Provider value={contextValue}>
-      {showCommentPreview ? (
-        <div className="mb-2">
-          {article}
-          <MemoCommentListView />
-        </div>
-      ) : (
-        article
-      )}
+      <SwipeableMemoCard memo={memoData} onEdit={openEditor}>
+        {showCommentPreview ? (
+          <div className="mb-2">
+            {article}
+            <MemoCommentListView />
+          </div>
+        ) : (
+          article
+        )}
+      </SwipeableMemoCard>
     </MemoViewContext.Provider>
   );
 };

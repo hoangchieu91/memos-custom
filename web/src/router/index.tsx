@@ -28,6 +28,16 @@ const Archived = lazyWithReload(() => import("@/pages/Archived"));
 const AuthCallback = lazyWithReload(() => import("@/pages/AuthCallback"));
 const Explore = lazyWithReload(() => import("@/pages/Explore"));
 const Inboxes = lazyWithReload(() => import("@/pages/Inboxes"));
+const Board = lazyWithReload(() => import("@/pages/Board"));
+const KnowledgeGraph = lazyWithReload(() => import("@/pages/KnowledgeGraph"));
+const NocoDB = lazyWithReload(() => import("@/pages/NocoDB"));
+const N8n = lazyWithReload(() => import("@/pages/N8n"));
+const QuestTimeline = lazyWithReload(() => import("@/pages/QuestTimeline"));
+const TagManager = lazyWithReload(() => import("@/pages/TagManager"));
+const AssetManager = lazyWithReload(() => import("@/pages/AssetManager"));
+const DebtManager = lazyWithReload(() => import("@/pages/DebtManager"));
+const CashflowTracker = lazyWithReload(() => import("@/pages/CashflowTracker"));
+const StatsDashboard = lazyWithReload(() => import("@/pages/StatsDashboard"));
 const MemoDetail = lazyWithReload(() => import("@/pages/MemoDetail"));
 const NotFound = lazyWithReload(() => import("@/pages/NotFound"));
 const PermissionDenied = lazyWithReload(() => import("@/pages/PermissionDenied"));
@@ -66,9 +76,19 @@ const router = createBrowserRouter([
             element: <MainLayout />,
             children: [
               { path: "", element: <Home /> },
+              { path: Routes.BOARD, element: <Board /> },
               { path: Routes.EXPLORE, element: <Explore /> },
               { path: Routes.ARCHIVED, element: <Archived /> },
               { path: "u/:username", element: <UserProfile /> },
+              { path: Routes.GRAPH, element: <KnowledgeGraph /> },
+              { path: "nocodb", element: <NocoDB /> },
+              { path: "n8n", element: <N8n /> },
+              { path: "timeline", element: <QuestTimeline /> },
+              { path: "tags", element: <TagManager /> },
+              { path: "inventory", element: <AssetManager /> },
+              { path: "debt", element: <DebtManager /> },
+              { path: "cashflow", element: <CashflowTracker /> },
+              { path: "stats", element: <StatsDashboard /> },
             ],
           },
           { path: Routes.ATTACHMENTS, element: <Attachments /> },
