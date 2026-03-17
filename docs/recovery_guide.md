@@ -10,10 +10,12 @@ This guide provides step-by-step instructions to rebuild and redeploy this custo
 ## 2. Key Custom Files
 The following files and directories contain the core custom logic:
 - **Web Components:**
-  - `web/src/pages/AssetManager.tsx`: Inventory management.
-  - `web/src/pages/DebtManager.tsx`: Debt tracking.
-  - `web/src/pages/CashflowTracker.tsx`: Income & Expense tracker.
-  - `web/src/utils/autoTag.ts`: Smart tagging logic.
+  - `web/src/pages/custom/AssetManager.tsx`: Inventory management.
+  - `web/src/pages/custom/DebtManager.tsx`: Debt tracking.
+  - `web/src/pages/custom/CashflowTracker.tsx`: Income & Expense tracker.
+  - `web/src/utils/autoTag.ts`: Smart tagging logic (unchanged).
+- **Custom UI Units:**
+  - `web/src/components/custom/`: AI panels, dashboards, and interactive cards.
 - **System Config:**
   - `scripts/Dockerfile`: Custom build configuration.
   - `scripts/entrypoint.sh`: Adjusted entrypoint for the container.
