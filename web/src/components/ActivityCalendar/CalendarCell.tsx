@@ -1,6 +1,7 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { getLunarLabel, getLunarTooltip } from "@/lib/lunar-calendar";
 import { DEFAULT_CELL_SIZE, SMALL_CELL_SIZE } from "./constants";
 import type { CalendarDayCell, CalendarSize } from "./types";
 import { getCellIntensityClass } from "./utils";
@@ -17,8 +18,22 @@ export interface CalendarCellProps {
 export const CalendarCell = memo((props: CalendarCellProps) => {
   const { day, maxCount, tooltipText, onClick, size = "default", disableTooltip = false } = props;
 
+  // Parse date for lunar calculation
+  const lunarInfo = useMemo(() => {
+    if (!day.isCurrentMonth) return null;
+    const parts = day.date.split("-");
+    if (parts.length !== 3) return null;
+    const [yy, mm, dd] = parts.map(Number);
+    return {
+      label: getLunarLabel(dd, mm, yy),
+      tooltip: getLunarTooltip(dd, mm, yy),
+      isFirstDay: getLunarLabel(dd, mm, yy).includes("/"),
+    };
+  }, [day.date, day.isCurrentMonth]);
+
   const handleClick = () => {
-    if (day.count > 0 && onClick) {
+    // Allow clicking on ANY date (not just days with memos)
+    if (onClick) {
       onClick(day.date);
     }
   };
@@ -27,12 +42,12 @@ export const CalendarCell = memo((props: CalendarCellProps) => {
   const smallExtraClasses = size === "small" ? `${SMALL_CELL_SIZE.dimensions} min-h-0` : "";
 
   const baseClasses = cn(
-    "aspect-square w-full flex items-center justify-center text-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 select-none border border-border/10 bg-muted/20",
+    "aspect-square w-full flex flex-col items-center justify-center text-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 select-none border border-border/10 bg-muted/20",
     sizeConfig.font,
     sizeConfig.borderRadius,
     smallExtraClasses,
   );
-  const isInteractive = Boolean(onClick && day.count > 0);
+  const isInteractive = Boolean(onClick);
   const ariaLabel = day.isSelected ? `${tooltipText} (selected)` : tooltipText;
 
   if (!day.isCurrentMonth) {
@@ -49,6 +64,11 @@ export const CalendarCell = memo((props: CalendarCellProps) => {
     isInteractive ? "cursor-pointer hover:bg-muted/40 hover:border-border/30" : "cursor-default",
   );
 
+  // Build tooltip with lunar info
+  const fullTooltip = lunarInfo
+    ? `${tooltipText ? tooltipText + " · " : ""}${lunarInfo.tooltip}`
+    : tooltipText;
+
   const button = (
     <button
       type="button"
@@ -59,11 +79,19 @@ export const CalendarCell = memo((props: CalendarCellProps) => {
       aria-disabled={!isInteractive}
       className={buttonClasses}
     >
-      {day.label}
+      <span className="leading-none">{day.label}</span>
+      {lunarInfo && size !== "small" && (
+        <span className={cn(
+          "text-[7px] leading-none mt-0.5 opacity-60",
+          lunarInfo.isFirstDay && "text-red-500 font-bold opacity-100"
+        )}>
+          {lunarInfo.label}
+        </span>
+      )}
     </button>
   );
 
-  const shouldShowTooltip = tooltipText && day.count > 0 && !disableTooltip;
+  const shouldShowTooltip = fullTooltip && !disableTooltip;
 
   if (!shouldShowTooltip) {
     return button;
@@ -73,7 +101,7 @@ export const CalendarCell = memo((props: CalendarCellProps) => {
     <Tooltip>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
       <TooltipContent side="top">
-        <p>{tooltipText}</p>
+        <p>{fullTooltip}</p>
       </TooltipContent>
     </Tooltip>
   );

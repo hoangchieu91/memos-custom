@@ -395,10 +395,10 @@ const CashflowTracker = () => {
     return res;
   }, [entries, tab, activeCategoryTab, search]);
 
-  // Navigate to source memo
+  // Navigate to source memo (route is /memos/:uid)
   const goToMemo = useCallback((memoName: string) => {
-    const uid = memoName.split("/")[1] || memoName;
-    navigate(`/m/${uid}`);
+    // memoName format: "memos/{uid}" → route: "/memos/{uid}"
+    navigate(`/${memoName}`);
   }, [navigate]);
 
   // Delete memo (soft-delete via API)

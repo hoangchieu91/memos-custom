@@ -126,14 +126,6 @@ const ProjectManager = () => {
   const upsert = (p: Project) => persist((prev) => prev.some((x) => x.id === p.id) ? prev.map((x) => x.id === p.id ? p : x) : [...prev, p]);
   const remove = (id: string) => persist((prev) => prev.filter((p) => p.id !== id));
 
-  if (syncing && projects.length === 0) {
-    return (
-      <div className="w-full h-[80vh] flex items-center justify-center">
-        <LoaderIcon className="w-8 h-8 animate-spin text-blue-500" />
-      </div>
-    );
-  }
-
   const filtered = useMemo(() => {
     if (!search) return projects;
     const q = search.toLowerCase();
@@ -146,6 +138,14 @@ const ProjectManager = () => {
     done: projects.filter((p) => p.status === "done").length,
     totalValue: projects.reduce((s, p) => s + p.value, 0),
   }), [projects]);
+
+  if (syncing && projects.length === 0) {
+    return (
+      <div className="w-full h-[80vh] flex items-center justify-center">
+        <LoaderIcon className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
 
   const handleExport = (project: Project) => {
     const lines = [
