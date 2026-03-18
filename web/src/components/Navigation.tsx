@@ -37,70 +37,82 @@ interface Props {
   className?: string;
 }
 
-// ── Collapsible group component ──────────────────────────────────────────────
-const NavGroupSection = ({
-  group,
-  collapsed,
-}: {
-  group: NavGroup;
-  collapsed?: boolean;
-}) => {
+// ── Nav item: icon always visible, label fades in on sidebar hover ────────────
+const NavItem = ({ navLink }: { navLink: NavLinkItem }) => (
+  <NavLink
+    className={({ isActive }) =>
+      cn(
+        "flex flex-row items-center rounded-2xl border transition-all duration-200 overflow-hidden",
+        "px-2 py-2 min-w-0",
+        isActive
+          ? "bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-accent-border drop-shadow"
+          : "border-transparent hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:border-sidebar-accent-border opacity-70 hover:opacity-100",
+      )
+    }
+    key={navLink.id}
+    to={navLink.path}
+    id={navLink.id}
+    viewTransition
+  >
+    {/* Icon — always centered when sidebar is narrow, left-aligned when expanded */}
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="shrink-0 group-hover/sidebar:mr-0">{navLink.icon}</span>
+        </TooltipTrigger>
+        <TooltipContent
+          side="right"
+          className="group-hover/sidebar:hidden"  // hide tooltip when sidebar is expanded
+        >
+          <p>{navLink.title}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+
+    {/* Label — hidden by default, shown on sidebar hover */}
+    <span
+      className={cn(
+        "ml-2.5 text-sm whitespace-nowrap truncate",
+        // Collapsed: width=0 opacity=0 (never takes space)
+        "w-0 opacity-0 overflow-hidden",
+        // Expanded via sidebar hover:
+        "group-hover/sidebar:w-auto group-hover/sidebar:opacity-100",
+        "transition-all duration-200",
+      )}
+    >
+      {navLink.title}
+    </span>
+  </NavLink>
+);
+
+// ── Group section with collapsible label ─────────────────────────────────────
+const NavGroupSection = ({ group }: { group: NavGroup }) => {
   const [open, setOpen] = useState(group.defaultOpen ?? true);
 
   return (
     <div className="w-full">
-      {/* Group header – hidden when collapsed */}
-      {!collapsed && (
-        <button
-          onClick={() => setOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-3 py-1 mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors"
-        >
-          <span>{group.label}</span>
-          <ChevronDownIcon
-            className={cn("w-3 h-3 transition-transform", !open && "-rotate-90")}
-          />
-        </button>
-      )}
-      {/* Items – always shown when collapsed (icons only), otherwise toggleable */}
-      {(open || collapsed) && (
-        <div className="flex flex-col gap-0.5 w-full">
-          {group.items.map((navLink) => (
-            <NavLink
-              className={({ isActive }) =>
-                cn(
-                  "px-2 py-2 rounded-2xl border flex flex-row items-center text-base text-sidebar-foreground transition-colors",
-                  collapsed ? "" : "w-full px-3",
-                  isActive
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-accent-border drop-shadow"
-                    : "border-transparent hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:border-sidebar-accent-border opacity-70 hover:opacity-100",
-                )
-              }
-              key={navLink.id}
-              to={navLink.path}
-              id={navLink.id}
-              viewTransition
-            >
-              {collapsed ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div>{navLink.icon}</div>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>{navLink.title}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : (
-                <>
-                  {navLink.icon}
-                  <span className="ml-2.5 truncate text-sm">{navLink.title}</span>
-                </>
-              )}
-            </NavLink>
-          ))}
-        </div>
-      )}
+      {/* Group header — only visible when sidebar is hovered (expanded) */}
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "w-full flex items-center justify-between px-2 py-1 mb-0.5",
+          "text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors",
+          // Hidden when collapsed, shown on hover
+          "opacity-0 h-0 overflow-hidden pointer-events-none",
+          "group-hover/sidebar:opacity-100 group-hover/sidebar:h-auto group-hover/sidebar:pointer-events-auto",
+          "transition-all duration-200",
+        )}
+      >
+        <span>{group.label}</span>
+        <ChevronDownIcon className={cn("w-3 h-3 transition-transform", !open && "-rotate-90")} />
+      </button>
+
+      {/* Items: always show when collapsed (group open irrelevant), toggle when expanded */}
+      <div className={cn("flex flex-col gap-0.5 w-full", !open && "group-hover/sidebar:hidden")}>
+        {group.items.map((navLink) => (
+          <NavItem key={navLink.id} navLink={navLink} />
+        ))}
+      </div>
     </div>
   );
 };
@@ -122,10 +134,10 @@ const Navigation = (props: Props) => {
   }, [theme]);
 
   const themeIcon =
-    theme === "default" ? <SunIcon className="w-5 h-5" /> :
-    theme === "default-dark" ? <MoonIcon className="w-5 h-5" /> :
-    theme === "paper" ? <BookOpenIcon className="w-5 h-5" /> :
-    <MonitorIcon className="w-5 h-5" />;
+    theme === "default" ? <SunIcon className="w-5 h-5 shrink-0" /> :
+    theme === "default-dark" ? <MoonIcon className="w-5 h-5 shrink-0" /> :
+    theme === "paper" ? <BookOpenIcon className="w-5 h-5 shrink-0" /> :
+    <MonitorIcon className="w-5 h-5 shrink-0" />;
   const themeLabel =
     theme === "default" ? "Light" :
     theme === "default-dark" ? "Dark" :
@@ -133,7 +145,6 @@ const Navigation = (props: Props) => {
 
   const unreadCount = notifications.filter((n) => n.status === UserNotification_Status.UNREAD).length;
 
-  // ── Groups ────────────────────────────────────────────────────────────────
   const groups: NavGroup[] = [
     {
       id: "notes",
@@ -210,64 +221,40 @@ const Navigation = (props: Props) => {
         {currentUser ? (
           <div className="w-full flex flex-col gap-3">
             {groups.map((group) => (
-              <NavGroupSection key={group.id} group={group} collapsed={collapsed} />
+              <NavGroupSection key={group.id} group={group} />
             ))}
           </div>
         ) : (
           guestLinks.map((link) => (
-            <NavLink
-              key={link.id}
-              id={link.id}
-              to={link.path}
-              className={({ isActive }) =>
-                cn(
-                  "px-2 py-2 rounded-2xl border flex flex-row items-center text-base text-sidebar-foreground transition-colors w-full px-3",
-                  isActive
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-accent-border drop-shadow"
-                    : "border-transparent hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:border-sidebar-accent-border opacity-70",
-                )
-              }
-            >
-              {link.icon}
-              {!collapsed && <span className="ml-2.5 text-sm">{link.title}</span>}
-            </NavLink>
+            <NavItem key={link.id} navLink={link} />
           ))
         )}
       </div>
 
       {/* Theme toggle */}
-      <div className={cn("w-full flex", collapsed ? "justify-center" : "px-3")}>
+      <div className="w-full flex px-1">
         <button
           onClick={cycleTheme}
-          className={cn(
-            "p-2 rounded-xl border border-transparent text-sidebar-foreground opacity-60 hover:opacity-100 hover:bg-sidebar-accent hover:border-sidebar-accent-border transition-all",
-            !collapsed && "w-full flex items-center gap-3"
-          )}
+          className="flex items-center p-2 rounded-xl border border-transparent text-sidebar-foreground opacity-60 hover:opacity-100 hover:bg-sidebar-accent hover:border-sidebar-accent-border transition-all overflow-hidden w-full"
           title={`Theme: ${themeLabel}`}
         >
-          {collapsed ? (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>{themeIcon}</div>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>Theme: {themeLabel}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            <>
-              {themeIcon}
-              <span className="text-sm">Theme: {themeLabel}</span>
-            </>
-          )}
+          {themeIcon}
+          <span
+            className={cn(
+              "ml-3 text-sm whitespace-nowrap",
+              "w-0 opacity-0 overflow-hidden",
+              "group-hover/sidebar:w-auto group-hover/sidebar:opacity-100",
+              "transition-all duration-200",
+            )}
+          >
+            {themeLabel}
+          </span>
         </button>
       </div>
 
       {currentUser && (
-        <div className={cn("w-full flex flex-col justify-end", collapsed ? "items-center" : "items-start pl-3")}>
-          <UserMenu collapsed={collapsed} />
+        <div className="w-full flex flex-col justify-end items-start pl-1">
+          <UserMenu collapsed={true} />
         </div>
       )}
     </header>
