@@ -1,5 +1,5 @@
-import { BrainCircuitIcon, LoaderIcon, SendIcon, XIcon } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { BrainCircuitIcon, LoaderIcon, SendIcon, XIcon, WifiIcon, WifiOffIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 interface ChatMessage {
@@ -9,46 +9,72 @@ interface ChatMessage {
 
 interface QdrantHit {
   score: number;
-  payload: {
-    name: string;
-    content: string;
-    snippet?: string;
-    tags?: string[];
-  };
+  payload: { name: string; content: string; snippet?: string; tags?: string[] };
 }
 
-const OLLAMA_URL = "http://10.25.7.111:11434";
-const QDRANT_URL = "http://10.25.7.111:6333";
+// Candidate Ollama servers (tried in order)
+const OLLAMA_CANDIDATES = [
+  "http://localhost:11434",
+  "http://10.25.7.111:11434",
+  "http://10.25.7.212:11434",
+];
+const QDRANT_CANDIDATES = [
+  "http://localhost:6333",
+  "http://10.25.7.111:6333",
+];
+
 const EMBED_MODEL = "nomic-embed-text";
-const CHAT_MODEL = "qwen2.5:1.5b";  // updated: server has 1.5b not 7b
+const CHAT_MODEL = "qwen2.5:1.5b";
 const COLLECTION = "memos";
 
-async function embedText(text: string): Promise<number[] | null> {
+async function pingOllama(base: string): Promise<boolean> {
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/embed`, {
+    const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(2000) });
+    return res.ok;
+  } catch { return false; }
+}
+
+async function pingQdrant(base: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${base}/collections/${COLLECTION}`, { signal: AbortSignal.timeout(2000) });
+    return res.ok;
+  } catch { return false; }
+}
+
+async function detectServers(): Promise<{ ollama: string | null; qdrant: string | null }> {
+  let ollama: string | null = null;
+  for (const url of OLLAMA_CANDIDATES) {
+    if (await pingOllama(url)) { ollama = url; break; }
+  }
+  let qdrant: string | null = null;
+  for (const url of QDRANT_CANDIDATES) {
+    if (await pingQdrant(url)) { qdrant = url; break; }
+  }
+  return { ollama, qdrant };
+}
+
+async function embedText(ollamaUrl: string, text: string): Promise<number[] | null> {
+  try {
+    const res = await fetch(`${ollamaUrl}/api/embed`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: EMBED_MODEL, input: text }),
     });
     const data = await res.json();
     return data.embeddings?.[0] || null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-async function searchQdrant(vector: number[], topK = 5): Promise<QdrantHit[]> {
+async function searchQdrant(qdrantUrl: string, vector: number[], topK = 5): Promise<QdrantHit[]> {
   try {
-    const res = await fetch(`${QDRANT_URL}/collections/${COLLECTION}/points/search`, {
+    const res = await fetch(`${qdrantUrl}/collections/${COLLECTION}/points/search`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ vector, limit: topK, with_payload: true }),
     });
     const data = await res.json();
     return data.result || [];
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 export const AiChatPanel = () => {
@@ -56,18 +82,43 @@ export const AiChatPanel = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [ollamaUrl, setOllamaUrl] = useState<string | null>(null);
+  const [qdrantUrl, setQdrantUrl] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      }
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }, 50);
   }, []);
 
+  // Auto-detect when panel opens
+  useEffect(() => {
+    if (!isOpen) return;
+    if (ollamaUrl) return; // already detected
+    setDetecting(true);
+    detectServers().then(({ ollama, qdrant }) => {
+      setOllamaUrl(ollama);
+      setQdrantUrl(qdrant);
+      setDetecting(false);
+      if (ollama) {
+        const src = ollama.includes("localhost") ? "localhost" : ollama;
+        setMessages([{
+          role: "assistant",
+          content: `✅ Đã kết nối Ollama tại **${src}**${qdrant ? " + Qdrant RAG" : " (không có Qdrant — trả lời không có ngữ cảnh ghi chú)"}.\n\nHỏi bất cứ điều gì về ghi chú của bạn!`,
+        }]);
+      } else {
+        setMessages([{
+          role: "assistant",
+          content: `❌ Không tìm thấy Ollama ở bất kỳ địa chỉ nào:\n${OLLAMA_CANDIDATES.map(u => `• ${u}`).join("\n")}\n\nGiải pháp:\n1. Cài và chạy Ollama: https://ollama.com\n2. Chạy: \`ollama pull ${CHAT_MODEL}\`\n3. Chạy: \`ollama pull ${EMBED_MODEL}\``,
+        }]);
+      }
+    });
+  }, [isOpen, ollamaUrl]);
+
   const handleSend = useCallback(async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || !ollamaUrl) return;
 
     const userMsg = input.trim();
     setInput("");
@@ -76,63 +127,52 @@ export const AiChatPanel = () => {
     scrollToBottom();
 
     try {
-      // Step 1: Embed query
-      const vector = await embedText(userMsg);
-      if (!vector) {
-        setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ Không kết nối được Ollama tại ${OLLAMA_URL}\n\nKiểm tra:\n• Server 10.25.7.111 có đang chạy không?\n• Model \`${EMBED_MODEL}\` đã được pull chưa?` }]);
-        setIsLoading(false);
-        return;
+      // Step 1: Embed + RAG search (optional, requires Qdrant)
+      let contextParts = "";
+      if (qdrantUrl) {
+        const vector = await embedText(ollamaUrl, userMsg);
+        if (vector) {
+          const hits = await searchQdrant(qdrantUrl, vector, 5);
+          contextParts = hits
+            .filter((h) => h.score > 0.3)
+            .map((h, i) => `[Ghi chú ${i + 1} - Score: ${h.score.toFixed(2)}]\n${h.payload.content?.substring(0, 400)}`)
+            .join("\n\n---\n\n");
+        }
       }
 
-      // Step 2: Search Qdrant RAG
-      const hits = await searchQdrant(vector, 5);
-      const contextParts = hits
-        .filter((h) => h.score > 0.3)
-        .map((h, i) => `[Ghi chú ${i + 1} - Score: ${h.score.toFixed(2)}]\n${h.payload.content?.substring(0, 500)}`)
-        .join("\n\n---\n\n");
-
-      // Step 3: Build system prompt with context
+      // Step 2: Build system prompt
       const systemPrompt = contextParts
-        ? `Bạn là trợ lý AI cá nhân. Dưới đây là các ghi chú liên quan từ bộ nhớ dài hạn của người dùng:\n\n${contextParts}\n\nDựa vào các ghi chú trên để trả lời câu hỏi. Nếu không tìm thấy thông tin liên quan, hãy nói rõ. Trả lời bằng tiếng Việt, ngắn gọn và hữu ích.`
-        : "Bạn là trợ lý AI cá nhân. Không tìm thấy ghi chú liên quan trong bộ nhớ. Hãy trả lời dựa trên kiến thức chung. Trả lời bằng tiếng Việt.";
+        ? `Bạn là trợ lý AI cá nhân. Ghi chú liên quan:\n\n${contextParts}\n\nDựa vào ghi chú trên để trả lời. Nếu không có thông tin liên quan hãy nói rõ. Trả lời tiếng Việt, ngắn gọn.`
+        : "Bạn là trợ lý AI cá nhân. Không có ghi chú liên quan. Trả lời dựa trên kiến thức chung bằng tiếng Việt.";
 
-      // Step 4: Stream response from Ollama
+      // Step 3: Chat
       const ollamaMessages = [
         { role: "system", content: systemPrompt },
-        ...messages.filter((m) => m.role !== "system").slice(-6), // Keep last 6 messages for context
+        ...messages.filter((m) => m.role !== "system").slice(-6),
         { role: "user", content: userMsg },
       ];
 
-      const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+      const res = await fetch(`${ollamaUrl}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: CHAT_MODEL,
-          messages: ollamaMessages,
-          stream: true,
-        }),
+        body: JSON.stringify({ model: CHAT_MODEL, messages: ollamaMessages, stream: true }),
       });
 
       if (!res.ok || !res.body) {
-        setMessages((prev) => [...prev, { role: "assistant", content: "❌ Lỗi kết nối Ollama Chat." }]);
-        setIsLoading(false);
+        setMessages((prev) => [...prev, { role: "assistant", content: `❌ Lỗi Ollama (${res.status}). Model \`${CHAT_MODEL}\` đã được pull chưa?\n\`ollama pull ${CHAT_MODEL}\`` }]);
         return;
       }
 
-      // Stream reading
+      // Step 4: Stream
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let assistantText = "";
-
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n").filter((l) => l.trim());
-
+        const lines = decoder.decode(value).split("\n").filter((l) => l.trim());
         for (const line of lines) {
           try {
             const json = JSON.parse(line);
@@ -145,21 +185,8 @@ export const AiChatPanel = () => {
               });
               scrollToBottom();
             }
-          } catch {
-            // Skip non-JSON lines
-          }
+          } catch { /* skip */ }
         }
-      }
-
-      // Append source info
-      if (hits.length > 0 && hits[0].score > 0.3) {
-        const sourceInfo = `\n\n---\n📚 Nguồn: ${hits.filter((h) => h.score > 0.3).length} ghi chú liên quan (Score cao nhất: ${hits[0].score.toFixed(2)})`;
-        assistantText += sourceInfo;
-        setMessages((prev) => {
-          const updated = [...prev];
-          updated[updated.length - 1] = { role: "assistant", content: assistantText };
-          return updated;
-        });
       }
     } catch (e) {
       setMessages((prev) => [...prev, { role: "assistant", content: `❌ Lỗi: ${e}` }]);
@@ -167,7 +194,11 @@ export const AiChatPanel = () => {
       setIsLoading(false);
       scrollToBottom();
     }
-  }, [input, isLoading, messages, scrollToBottom]);
+  }, [input, isLoading, messages, ollamaUrl, qdrantUrl, scrollToBottom]);
+
+  const statusDot = ollamaUrl
+    ? <WifiIcon className="w-3 h-3 text-green-400" />
+    : <WifiOffIcon className="w-3 h-3 text-red-400" />;
 
   if (!isOpen) {
     return (
@@ -184,10 +215,12 @@ export const AiChatPanel = () => {
   return (
     <div className="fixed bottom-6 right-6 z-50 w-[380px] h-[520px] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 text-white">
+      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 text-white shrink-0">
         <div className="flex items-center gap-2">
           <BrainCircuitIcon className="w-5 h-5" />
           <span className="font-bold text-sm">AI Memory Assistant</span>
+          {!detecting && <span className="ml-1">{statusDot}</span>}
+          {detecting && <LoaderIcon className="w-3 h-3 animate-spin ml-1" />}
         </div>
         <button onClick={() => setIsOpen(false)} className="hover:bg-white/20 rounded-full p-1 transition-colors">
           <XIcon className="w-4 h-4" />
@@ -196,11 +229,10 @@ export const AiChatPanel = () => {
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 text-sm">
-        {messages.length === 0 && (
+        {messages.length === 0 && !detecting && (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-center px-4">
             <BrainCircuitIcon className="w-12 h-12 mb-3 opacity-30" />
-            <p className="font-medium">Hỏi bất cứ điều gì</p>
-            <p className="text-xs mt-1 opacity-70">AI sẽ tìm kiếm trong toàn bộ ghi chú của bạn (Qdrant RAG) và trả lời bằng Ollama local.</p>
+            <p className="font-medium">Đang kiểm tra kết nối...</p>
           </div>
         )}
         {messages.map((msg, i) => (
@@ -212,27 +244,27 @@ export const AiChatPanel = () => {
                   : "bg-muted text-foreground rounded-bl-sm"
               }`}
             >
-              {msg.content || (isLoading ? "..." : "")}
+              {msg.content || (isLoading ? "▌" : "")}
             </div>
           </div>
         ))}
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t border-border flex items-center gap-2">
+      <div className="p-3 border-t border-border flex items-center gap-2 shrink-0">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder="Hỏi về ghi chú của bạn..."
+          placeholder={ollamaUrl ? "Hỏi về ghi chú của bạn..." : "Chờ kết nối Ollama..."}
           className="flex-1 bg-muted rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-indigo-500"
-          disabled={isLoading}
+          disabled={isLoading || !ollamaUrl}
         />
         <Button
           size="sm"
           onClick={handleSend}
-          disabled={isLoading || !input.trim()}
+          disabled={isLoading || !input.trim() || !ollamaUrl}
           className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3"
         >
           {isLoading ? <LoaderIcon className="w-4 h-4 animate-spin" /> : <SendIcon className="w-4 h-4" />}
