@@ -17,9 +17,16 @@ import { SearchIcon, XIcon } from "lucide-react";
 import MobileHeader from "@/components/MobileHeader";
 import { useMemos, useUpdateMemo } from "@/hooks/useMemoQueries";
 import { Memo } from "@/types/proto/api/v1/memo_service_pb";
-import dayjs from "dayjs";
-import "dayjs/locale/vi";
-dayjs.locale("vi");
+
+function timeAgo(date: Date): string {
+  const now = Date.now();
+  const diff = Math.floor((now - date.getTime()) / 1000);
+  if (diff < 60) return "vừa xong";
+  if (diff < 3600) return `${Math.floor(diff / 60)} phút trước`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} giờ trước`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)} ngày trước`;
+  return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+}
 
 type ColumnTag = "todo" | "doing" | "review" | "payment" | "warranty" | "done";
 
@@ -82,7 +89,13 @@ const KanbanCard = ({
   const priority = getPriority(memo.content);
   const title = getTitle(memo.content);
   const visibleTags = (memo.tags || []).filter((t) => !ALL_COL_TAGS.includes(t) && t !== "task").slice(0, 3);
-  const displayTime = memo.displayTime ? dayjs(memo.displayTime.toDate()).fromNow() : "";
+  const displayTime = (() => {
+    try {
+      if (!memo.displayTime) return "";
+      const secs = Number(memo.displayTime.seconds ?? 0);
+      return timeAgo(new Date(secs * 1000));
+    } catch { return ""; }
+  })();
 
   return (
     <div

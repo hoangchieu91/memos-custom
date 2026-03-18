@@ -90,18 +90,33 @@ const RootLayout = () => {
     };
   }, [sm, mobileMenuOpen]);
 
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem("nav_collapsed") !== "false"; } catch { return true; }
+  });
+
+  // Sync sidebar width when Navigation toggle fires
+  useEffect(() => {
+    const onStorage = () => {
+      try { setNavCollapsed(localStorage.getItem("nav_collapsed") !== "false"); } catch { /**/ }
+    };
+    // Poll every 200ms (Navigation uses setState not StorageEvent for same-tab)
+    const interval = setInterval(onStorage, 200);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <div className="w-full min-h-full flex flex-row justify-center items-start sm:pl-16">
-      {/* Desktop sidebar — icon strip (w-16), expands to w-56 on hover */}
+    <div className={cn("w-full min-h-full flex flex-row justify-center items-start", sm && (navCollapsed ? "sm:pl-16" : "sm:pl-52"))}>
+      {/* Desktop sidebar — width driven by click-toggle state */}
       {sm && (
         <div
           className={cn(
-            "group/sidebar flex flex-col justify-start items-start fixed top-0 left-0 select-none h-full bg-sidebar z-50",
-            "w-16 hover:w-56 transition-[width] duration-200 ease-in-out overflow-hidden",
+            "flex flex-col justify-start items-start fixed top-0 left-0 select-none h-full bg-sidebar z-50",
+            "transition-[width] duration-200 ease-in-out overflow-hidden",
             "border-r border-border",
+            navCollapsed ? "w-16" : "w-52",
           )}
         >
-          <Navigation className="py-4 md:pt-6 w-full" collapsed={false} />
+          <Navigation className="py-4 md:pt-6 w-full" />
         </div>
       )}
 
