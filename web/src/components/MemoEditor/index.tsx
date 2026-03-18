@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useRef, useState, useMemo } from "react";
+import { useRef, useState, useMemo, useEffect } from "react";
 import { toast } from "react-hot-toast";
-import { LoaderIcon, SparklesIcon, XIcon } from "lucide-react";
+import { CalendarIcon, LoaderIcon, SparklesIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
@@ -11,6 +11,7 @@ import { handleError } from "@/lib/error";
 import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
 import { convertVisibilityFromString } from "@/utils/memo";
+import { detectPastDate, formatDetectedDate } from "@/utils/dateDetect";
 import { EditorContent, EditorMetadata, EditorToolbar, FocusModeExitButton, FocusModeOverlay, TimestampPopover } from "./components";
 import { FOCUS_MODE_STYLES } from "./constants";
 import type { EditorRefActions } from "./Editor";
@@ -153,6 +154,28 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
     }
   };
 
+  // ── Backdate detection ──────────────────────────────────────────────────────
+  const detectedDate = useMemo(() => detectPastDate(state.content), [state.content]);
+  const [backdateDismissed, setBackdateDismissed] = useState(false);
+  const [backdateApplied, setBackdateApplied] = useState<Date | null>(null);
+  // backdateRef stores the date to apply after save (avoids type issues with editor state)
+  const backdateRef = useRef<Date | null>(null);
+  // Reset dismissed state when a new date is detected
+  useEffect(() => {
+    setBackdateDismissed(false);
+    setBackdateApplied(null);
+    backdateRef.current = null;
+  }, [detectedDate?.getTime()]);
+
+  const showBackdateBanner = detectedDate && !backdateDismissed && !backdateApplied;
+
+  const handleApplyBackdate = () => {
+    if (!detectedDate) return;
+    backdateRef.current = detectedDate;
+    setBackdateApplied(detectedDate);
+    toast.success(`📅 Đã đặt ngày: ${formatDetectedDate(detectedDate)}`);
+  };
+
   useKeyboard(editorRef, { onSave: handleSave });
 
   async function handleSave() {
@@ -187,6 +210,21 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
         toast.error(t("editor.no-changes-detected"));
         onCancel?.();
         return;
+      }
+
+      // Apply backdate if user confirmed via the AI banner
+      if (backdateRef.current && result.memoName) {
+        try {
+          const unixSec = Math.floor(backdateRef.current.getTime() / 1000);
+          await fetch(`/api/v1/${result.memoName}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              displayTime: new Date(unixSec * 1000).toISOString(),
+              updateMask: "display_time",
+            }),
+          });
+        } catch { /* silent — backdate is best-effort */ }
       }
 
       // Clear localStorage cache on successful save
@@ -282,6 +320,35 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
                 />
               </button>
             ))}
+          </div>
+        )}
+
+        {/* AI Backdate banner */}
+        {showBackdateBanner && (
+          <div className="w-full flex items-center gap-2 px-1 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <CalendarIcon className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex-1">
+              AI phát hiện ghi chú cho ngày: <strong>{formatDetectedDate(detectedDate!)}</strong>
+            </span>
+            <button
+              onClick={handleApplyBackdate}
+              className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-white font-semibold hover:bg-amber-600 transition-colors"
+            >
+              Đặt ngày này
+            </button>
+            <button
+              onClick={() => setBackdateDismissed(true)}
+              className="text-amber-500 hover:text-amber-700"
+            >
+              <XIcon className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+        {backdateApplied && (
+          <div className="w-full flex items-center gap-1.5 px-1">
+            <CalendarIcon className="w-3 h-3 text-amber-500" />
+            <span className="text-[10px] text-amber-500">📅 Ngày hiển thị: <strong>{formatDetectedDate(backdateApplied)}</strong></span>
+            <button onClick={() => { setBackdateApplied(null); backdateRef.current = null; }} className="text-[10px] text-rose-400 underline ml-1">Huỷ</button>
           </div>
         )}
 

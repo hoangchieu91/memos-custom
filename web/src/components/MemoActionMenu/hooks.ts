@@ -18,7 +18,7 @@ interface UseMemoActionHandlersOptions {
   setDeleteDialogOpen: (open: boolean) => void;
 }
 
-export const useMemoActionHandlers = ({ memo, onEdit, setDeleteDialogOpen }: UseMemoActionHandlersOptions) => {
+export const useMemoActionHandlers = ({ memo, onEdit, setDeleteDialogOpen: _setDeleteDialogOpen }: UseMemoActionHandlersOptions) => {
   const t = useTranslate();
   const location = useLocation();
   const navigateTo = useNavigateTo();
@@ -29,22 +29,16 @@ export const useMemoActionHandlers = ({ memo, onEdit, setDeleteDialogOpen }: Use
   const isInMemoDetailPage = location.pathname.startsWith(`/${memo.name}`);
 
   const memoUpdatedCallback = useCallback(() => {
-    // Invalidate user stats to trigger refetch
     queryClient.invalidateQueries({ queryKey: userKeys.stats() });
   }, [queryClient]);
 
   const handleTogglePinMemoBtnClick = useCallback(async () => {
     try {
       await updateMemo({
-        update: {
-          name: memo.name,
-          pinned: !memo.pinned,
-        },
+        update: { name: memo.name, pinned: !memo.pinned },
         updateMask: ["pinned"],
       });
-    } catch {
-      // do nothing
-    }
+    } catch { /* silent */ }
   }, [memo.name, memo.pinned, updateMemo]);
 
   const handleEditMemoClick = useCallback(() => {
@@ -55,24 +49,13 @@ export const useMemoActionHandlers = ({ memo, onEdit, setDeleteDialogOpen }: Use
     const isArchiving = memo.state !== State.ARCHIVED;
     const state = memo.state === State.ARCHIVED ? State.NORMAL : State.ARCHIVED;
     const message = memo.state === State.ARCHIVED ? t("message.restored-successfully") : t("message.archived-successfully");
-
     try {
-      await updateMemo({
-        update: {
-          name: memo.name,
-          state,
-        },
-        updateMask: ["state"],
-      });
+      await updateMemo({ update: { name: memo.name, state }, updateMask: ["state"] });
       toast.success(message);
     } catch (error: unknown) {
-      handleError(error, toast.error, {
-        context: `${isArchiving ? "Archive" : "Restore"} memo`,
-        fallbackMessage: "An error occurred",
-      });
+      handleError(error, toast.error, { context: isArchiving ? "Archive memo" : "Restore memo", fallbackMessage: "An error occurred" });
       return;
     }
-
     if (isInMemoDetailPage) {
       navigateTo(memo.state === State.ARCHIVED ? "/" : "/archived");
     }
@@ -81,9 +64,7 @@ export const useMemoActionHandlers = ({ memo, onEdit, setDeleteDialogOpen }: Use
 
   const handleCopyLink = useCallback(() => {
     let host = profile.instanceUrl;
-    if (host === "") {
-      host = window.location.origin;
-    }
+    if (host === "") host = window.location.origin;
     copy(`${host}/${memo.name}`);
     toast.success(t("message.succeed-copy-link"));
   }, [memo.name, t, profile.instanceUrl]);
@@ -93,10 +74,75 @@ export const useMemoActionHandlers = ({ memo, onEdit, setDeleteDialogOpen }: Use
     toast.success(t("message.succeed-copy-content"));
   }, [memo.content, t]);
 
-  const handleDeleteMemoClick = useCallback(() => {
-    setDeleteDialogOpen(true);
-  }, [setDeleteDialogOpen]);
+  // ── SOFT DELETE: Archive + undo toast ────────────────────────────────────
+  const handleDeleteMemoClick = useCallback(async () => {
+    // Step 1: archive (soft delete)
+    try {
+      await updateMemo({
+        update: { name: memo.name, state: State.ARCHIVED },
+        updateMask: ["state"],
+      });
+      queryClient.invalidateQueries({ queryKey: memoKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: userKeys.stats() });
+    } catch (error: unknown) {
+      handleError(error, toast.error, { context: "Archive memo", fallbackMessage: "Không thể xóa" });
+      return;
+    }
 
+    // Step 2: build plain-text toast with inline "Hoàn tác" link (no JSX)
+    const restoreMemo = async () => {
+      try {
+        await updateMemo({
+          update: { name: memo.name, state: State.NORMAL },
+          updateMask: ["state"],
+        });
+        queryClient.invalidateQueries({ queryKey: memoKeys.lists() });
+        queryClient.invalidateQueries({ queryKey: userKeys.stats() });
+        toast.success("✅ Đã khôi phục");
+        if (memo.parent) {
+          queryClient.invalidateQueries({ queryKey: memoKeys.comments(memo.parent) });
+        }
+      } catch { /* silent */ }
+    };
+
+    // Use toast with a render function — this file is .ts, render via DOM createElement
+    toast(
+      (toastInstance) => {
+        const container = document.createElement("span");
+        container.style.display = "flex";
+        container.style.alignItems = "center";
+        container.style.gap = "8px";
+        container.style.fontSize = "14px";
+
+        const msg = document.createElement("span");
+        msg.textContent = "🗑️ Đã xóa memo";
+        container.appendChild(msg);
+
+        const btn = document.createElement("button");
+        btn.textContent = "Hoàn tác";
+        btn.style.cssText =
+          "font-weight:700;color:#fbbf24;text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;font-size:13px;";
+        btn.addEventListener("click", () => {
+          toast.dismiss(toastInstance.id);
+          restoreMemo();
+        });
+        container.appendChild(btn);
+
+        return container as unknown as React.ReactElement;
+      },
+      { duration: 5000, position: "bottom-center", style: { background: "#27272a", color: "#fff", borderRadius: "12px" } },
+    );
+
+    if (memo.parent) {
+      queryClient.invalidateQueries({ queryKey: memoKeys.comments(memo.parent) });
+    }
+    if (isInMemoDetailPage) {
+      navigateTo("/");
+    }
+    memoUpdatedCallback();
+  }, [memo.name, memo.content, memo.parent, isInMemoDetailPage, navigateTo, memoUpdatedCallback, updateMemo, queryClient]);
+
+  // ── HARD DELETE (only from Archived page) ────────────────────────────────
   const confirmDeleteMemo = useCallback(async () => {
     try {
       await deleteMemo(memo.name);
