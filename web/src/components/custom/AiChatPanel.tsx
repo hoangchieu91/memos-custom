@@ -20,7 +20,7 @@ interface QdrantHit {
 const OLLAMA_URL = "http://10.25.7.111:11434";
 const QDRANT_URL = "http://10.25.7.111:6333";
 const EMBED_MODEL = "nomic-embed-text";
-const CHAT_MODEL = "qwen2.5:7b";
+const CHAT_MODEL = "qwen2.5:1.5b";  // updated: server has 1.5b not 7b
 const COLLECTION = "memos";
 
 async function embedText(text: string): Promise<number[] | null> {
@@ -79,7 +79,7 @@ export const AiChatPanel = () => {
       // Step 1: Embed query
       const vector = await embedText(userMsg);
       if (!vector) {
-        setMessages((prev) => [...prev, { role: "assistant", content: "🏖️ Nhân viên AI của chúng tôi đang nghỉ phép! (Máy local chưa bật Ollama)" }]);
+        setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ Không kết nối được Ollama tại ${OLLAMA_URL}\n\nKiểm tra:\n• Server 10.25.7.111 có đang chạy không?\n• Model \`${EMBED_MODEL}\` đã được pull chưa?` }]);
         setIsLoading(false);
         return;
       }
