@@ -38,6 +38,10 @@ const AssetManager = lazyWithReload(() => import("@/pages/custom/AssetManager"))
 const DebtManager = lazyWithReload(() => import("@/pages/custom/DebtManager"));
 const CashflowTracker = lazyWithReload(() => import("@/pages/custom/CashflowTracker"));
 const StatsDashboard = lazyWithReload(() => import("@/pages/custom/StatsDashboard"));
+const SalaryManager = lazyWithReload(() => import("@/pages/custom/SalaryManager"));
+const ProjectManager = lazyWithReload(() => import("@/pages/custom/ProjectManager"));
+const ContractManager = lazyWithReload(() => import("@/pages/custom/ContractManager"));
+const DocumentEditor = lazyWithReload(() => import("@/pages/custom/DocumentEditor"));
 const MemoDetail = lazyWithReload(() => import("@/pages/MemoDetail"));
 const NotFound = lazyWithReload(() => import("@/pages/NotFound"));
 const PermissionDenied = lazyWithReload(() => import("@/pages/PermissionDenied"));
@@ -89,6 +93,10 @@ const router = createBrowserRouter([
               { path: "debt", element: <DebtManager /> },
               { path: "cashflow", element: <CashflowTracker /> },
               { path: "stats", element: <StatsDashboard /> },
+              { path: "salary", element: <SalaryManager /> },
+              { path: "projects", element: <ProjectManager /> },
+              { path: "contracts", element: <ContractManager /> },
+              { path: "documents", element: <DocumentEditor /> },
             ],
           },
           { path: Routes.ATTACHMENTS, element: <Attachments /> },
