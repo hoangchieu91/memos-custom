@@ -5,13 +5,16 @@ import {
   CarIcon,
   CheckCircleIcon,
   CoffeeIcon,
+  ExternalLinkIcon,
   GiftIcon,
   HeartIcon,
   LoaderIcon,
+  PencilIcon,
   PlusIcon,
   SearchIcon,
   ShirtIcon,
   ShoppingBagIcon,
+  Trash2Icon,
   TrendingDownIcon,
   TrendingUpIcon,
   UtensilsIcon,
@@ -19,11 +22,13 @@ import {
   WrenchIcon,
   ZapIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import dayjs from "dayjs";
+import { useNavigate } from "react-router-dom";
 import { useInfiniteMemos } from "@/hooks/useMemoQueries";
 import { State } from "@/types/proto/api/v1/common_pb";
+import toast from "react-hot-toast";
 
 // ============================================================================
 // Price Parsing (Same as AssetManager/DebtManager)
@@ -158,7 +163,7 @@ const CATEGORIES: Record<CategoryKey, CategoryConfig> = {
     color: "text-pink-500",
     bg: "bg-pink-500",
     emoji: "👕",
-    keywords: /\b(quần|áo|giày|dép|túi|ba lô|mũ|nón|kính|đồng hồ|thời trang|uniqlo|zara|shopee|lazada|fashion|trang sức)\b/i,
+    keywords: /(?:^|\s)(quần áo|quần|áo sơ mi|áo thun|áo khoác|giày|dép|túi xách|ba lô|mũ|nón|kính mát|đồng hồ|thời trang|uniqlo|zara|fashion|trang sức)(?:\s|$|[.,!?])/i,
   },
   transport: {
     type: "expense",
@@ -251,6 +256,7 @@ function detectCategory(text: string, tags: string[], type: CashflowType): Categ
 
 interface CashflowEntry {
   uid: string;
+  memoName: string;
   content: string;
   type: CashflowType;
   date: string;
@@ -269,9 +275,11 @@ type TabType = "all" | "income" | "expense";
 // ============================================================================
 
 const CashflowTracker = () => {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<TabType>("all");
   const [search, setSearch] = useState("");
   const [activeCategoryTab, setActiveCategoryTab] = useState<string>("all");
+  const [showZeroAmount, setShowZeroAmount] = useState(false);
 
   const { data, isLoading } = useInfiniteMemos({
     pageSize: 500,
@@ -313,19 +321,23 @@ const CashflowTracker = () => {
           .trim()
           .substring(0, 120);
 
+        const amount = parsePrice(content);
+
         return {
           uid: name.split("/")[1] || name,
+          memoName: name,
           content,
           type,
           date: dt.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }),
           dateKey: dayjs(dt).format("YYYY-MM-DD"),
           month: dayjs(dt).format("YYYY-MM"),
-          amount: parsePrice(content),
+          amount,
           category: detectCategory(content, tags, type),
           preview,
           tags,
         };
-      });
+      })
+      .filter((e) => showZeroAmount || e.amount > 0);
   }, [allMemos]);
 
   // Stats
@@ -382,6 +394,33 @@ const CashflowTracker = () => {
     }
     return res;
   }, [entries, tab, activeCategoryTab, search]);
+
+  // Navigate to source memo
+  const goToMemo = useCallback((memoName: string) => {
+    const uid = memoName.split("/")[1] || memoName;
+    navigate(`/m/${uid}`);
+  }, [navigate]);
+
+  // Delete memo (soft-delete via API)
+  const handleDelete = useCallback(async (entry: CashflowEntry) => {
+    if (!confirm(`Xóa giao dịch: ${entry.preview.substring(0, 60)}...?`)) return;
+    try {
+      const res = await fetch(`/api/v1/${entry.memoName}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rowStatus: "ARCHIVED" }),
+        credentials: "include",
+      });
+      if (res.ok) {
+        toast.success("Đã ẩn giao dịch (memo archived)");
+        window.location.reload();
+      } else {
+        toast.error("Lỗi khi xóa: " + res.statusText);
+      }
+    } catch (e) {
+      toast.error("Lỗi: " + e);
+    }
+  }, []);
 
   if (isLoading) {
     return (
@@ -552,15 +591,29 @@ const CashflowTracker = () => {
         </div>
       )}
 
+      {/* ========================= SHOW ZERO TOGGLE ========================= */}
+      <div className="mt-4 flex items-center justify-end">
+        <label className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={showZeroAmount}
+            onChange={(e) => setShowZeroAmount(e.target.checked)}
+            className="rounded"
+          />
+          Hiển thị ghi chú 0đ
+        </label>
+      </div>
+
       {/* ========================= TRANSACTION LIST ========================= */}
-      <div className="mt-6 space-y-3">
+      <div className="mt-4 space-y-3">
         {filtered.map((entry) => {
           const cfg = CATEGORIES[entry.category];
           const isIncome = entry.type === "income";
           return (
             <div
               key={entry.uid}
-              className={`bg-card border rounded-xl px-4 py-3 transition-colors hover:bg-muted/30 ${isIncome ? "border-emerald-500/10 hover:border-emerald-500/30" : "border-rose-500/10 hover:border-rose-500/30"}`}
+              className={`bg-card border rounded-xl px-4 py-3 transition-colors hover:bg-muted/30 cursor-pointer group ${isIncome ? "border-emerald-500/10 hover:border-emerald-500/30" : "border-rose-500/10 hover:border-rose-500/30"}`}
+              onClick={() => goToMemo(entry.memoName)}
             >
               <div className="flex items-start gap-3">
                 <div className={`mt-0.5 p-2 rounded-lg flex-shrink-0 ${isIncome ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"}`}>
@@ -582,6 +635,30 @@ const CashflowTracker = () => {
                     </div>
                   </div>
                   <p className="text-sm text-foreground leading-relaxed line-clamp-1">{entry.preview}</p>
+                  {/* Action buttons — visible on hover */}
+                  <div className="flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); goToMemo(entry.memoName); }}
+                      className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-600 transition-colors"
+                      title="Xem ghi chú gốc"
+                    >
+                      <ExternalLinkIcon className="w-3 h-3" /> Xem gốc
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); goToMemo(entry.memoName); }}
+                      className="flex items-center gap-1 text-[10px] text-amber-500 hover:text-amber-600 transition-colors"
+                      title="Sửa ghi chú"
+                    >
+                      <PencilIcon className="w-3 h-3" /> Sửa
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(entry); }}
+                      className="flex items-center gap-1 text-[10px] text-rose-400 hover:text-rose-600 transition-colors"
+                      title="Xóa (ẩn ghi chú)"
+                    >
+                      <Trash2Icon className="w-3 h-3" /> Xóa
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
