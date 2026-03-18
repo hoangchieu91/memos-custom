@@ -22,6 +22,12 @@ const TAG_RULES: TagRule[] = [
   // === INCOME / REVENUE ===
   { tag: "#income", keywords: /\b(lương|thưởng|bonus|freelance|project|dự án|thu nhập|tiền về|nạp|phụ cấp|per diem|thanh toán từ)\b/i, priority: 110 },
 
+  // === SALARY MANAGEMENT ===
+  { tag: "#salary/transfer", keywords: /chuyển\s*(cho\s*)?vợ|gửi\s*(cho\s*)?vợ|nộp\s*vợ/i, priority: 115 },
+  { tag: "#salary/allowance", keywords: /vợ\s*(cho|cấp|đưa|phát)|tiền\s*(tiêu|xài|sinh hoạt)\s*(tháng|tuần)|được\s*cấp\s*tiền/i, priority: 115 },
+  { tag: "#salary", keywords: /nhận\s*lương|lương\s*(tháng|tuần|năm)|trả\s*lương|lĩnh\s*lương|salary|payroll/i, priority: 112 },
+
+
   // === DEBT / CREDIT ===
   { tag: "#debt/receivable", keywords: /mua\s*hộ|bán\s*chịu|cho\s*(vay|mượn\s*tiền)|nợ\s*mình|họ\s*nợ/i, priority: 100 },
   { tag: "#debt/payable", keywords: /mình\s*nợ|tôi\s*nợ|mượn\s*(tiền|của)|phải\s*trả\s*(lại|cho)/i, priority: 100 },

@@ -1,8 +1,9 @@
 import {
   FileTextIcon, PlusIcon, SearchIcon, AlertTriangleIcon, CheckCircleIcon,
-  ClockIcon, XIcon, TrashIcon, PrinterIcon,
+  ClockIcon, XIcon, TrashIcon,
 } from "lucide-react";
 import { useState, useMemo } from "react";
+import useMemosStore from "@/hooks/useMemosStore";
 
 type ContractStatus = "draft" | "signed" | "active" | "settled" | "cancelled";
 
@@ -35,11 +36,8 @@ function fmt(n: number) {
   return `${n.toLocaleString("vi-VN")}đ`;
 }
 
-const STORAGE_KEY = "personal_os_contracts";
-function load(): Contract[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch { return []; }
-}
-function save(c: Contract[]) { localStorage.setItem(STORAGE_KEY, JSON.stringify(c)); }
+const STORAGE_KEY = "contracts";
+
 
 function daysLeft(dateStr: string): number {
   if (!dateStr) return Infinity;
@@ -97,14 +95,14 @@ const ContractModal = ({ initial, onSave, onClose }: { initial?: Contract; onSav
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 const ContractManager = () => {
-  const [contracts, setContracts] = useState<Contract[]>(load);
+  const [contracts, setContracts] = useMemosStore<Contract[]>(STORAGE_KEY, []);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<ContractStatus | "all">("all");
   const [modal, setModal] = useState<"new" | Contract | null>(null);
 
-  const persist = (c: Contract[]) => { setContracts(c); save(c); };
-  const upsert = (c: Contract) => persist(contracts.some((x) => x.id === c.id) ? contracts.map((x) => x.id === c.id ? c : x) : [...contracts, c]);
-  const remove = (id: string) => persist(contracts.filter((c) => c.id !== id));
+  const persist = setContracts;
+  const upsert = (c: Contract) => persist((prev) => prev.some((x) => x.id === c.id) ? prev.map((x) => x.id === c.id ? c : x) : [...prev, c]);
+  const remove = (id: string) => persist((prev) => prev.filter((c) => c.id !== id));
 
   const filtered = useMemo(() => {
     return contracts.filter((c) => {

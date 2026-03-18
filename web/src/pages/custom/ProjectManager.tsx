@@ -1,9 +1,10 @@
 import {
-  BriefcaseIcon, PlusIcon, SearchIcon, CheckCircleIcon, ClockIcon,
+  BriefcaseIcon, PlusIcon, SearchIcon, CheckCircleIcon,
   AlertCircleIcon, PlayCircleIcon, StarIcon, CalendarIcon, TrashIcon,
-  XIcon, ChevronRightIcon,
+  XIcon, ChevronRightIcon, LoaderIcon,
 } from "lucide-react";
 import { useState, useMemo } from "react";
+import useMemosStore from "@/hooks/useMemosStore";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Status = "planning" | "active" | "review" | "done" | "paused";
@@ -31,16 +32,8 @@ const STATUS_CONFIG: Record<Status, { label: string; color: string; bg: string; 
 
 const KANBAN_COLS: Status[] = ["planning", "active", "review", "done"];
 
-const STORAGE_KEY = "personal_os_projects";
+const STORAGE_KEY = "projects";
 
-function loadProjects(): Project[] {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-  } catch { return []; }
-}
-function saveProjects(projects: Project[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-}
 function fmt(n: number) {
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}tỷ`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}tr`;
@@ -124,14 +117,22 @@ const ProjectModal = ({
 
 // ── Main Component ────────────────────────────────────────────────────────────
 const ProjectManager = () => {
-  const [projects, setProjects] = useState<Project[]>(loadProjects);
+  const [projects, setProjects, syncing] = useMemosStore<Project[]>(STORAGE_KEY, []);
   const [view, setView] = useState<"kanban" | "list">("kanban");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<"new" | Project | null>(null);
 
-  const persist = (updated: Project[]) => { setProjects(updated); saveProjects(updated); };
-  const upsert = (p: Project) => persist(projects.some((x) => x.id === p.id) ? projects.map((x) => x.id === p.id ? p : x) : [...projects, p]);
-  const remove = (id: string) => persist(projects.filter((p) => p.id !== id));
+  const persist = setProjects;
+  const upsert = (p: Project) => persist((prev) => prev.some((x) => x.id === p.id) ? prev.map((x) => x.id === p.id ? p : x) : [...prev, p]);
+  const remove = (id: string) => persist((prev) => prev.filter((p) => p.id !== id));
+
+  if (syncing && projects.length === 0) {
+    return (
+      <div className="w-full h-[80vh] flex items-center justify-center">
+        <LoaderIcon className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
 
   const filtered = useMemo(() => {
     if (!search) return projects;

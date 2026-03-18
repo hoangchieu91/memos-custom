@@ -92,16 +92,16 @@ const RootLayout = () => {
 
   return (
     <div className="w-full min-h-full flex flex-row justify-center items-start sm:pl-16">
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — icon strip (w-16), expands to w-56 on hover */}
       {sm && (
         <div
           className={cn(
-            "group flex flex-col justify-start items-start fixed top-0 left-0 select-none h-full bg-sidebar",
-            "w-16 px-2",
+            "group/sidebar flex flex-col justify-start items-start fixed top-0 left-0 select-none h-full bg-sidebar z-50",
+            "w-16 hover:w-56 transition-[width] duration-200 ease-in-out overflow-hidden",
             "border-r border-border",
           )}
         >
-          <Navigation className="py-4 md:pt-6" collapsed={true} />
+          <Navigation className="py-4 md:pt-6 w-full" collapsed={false} />
         </div>
       )}
 
