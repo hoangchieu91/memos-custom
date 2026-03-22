@@ -1,11 +1,9 @@
 import dayjs from "dayjs";
-import { CheckCircle, Circle, Clock, CloudIcon, CloudRainIcon, LoaderIcon, SunIcon } from "lucide-react";
+import { CheckCircle, Circle, CloudIcon, CloudRainIcon, SunIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { MonthCalendar } from "@/components/ActivityCalendar";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useMemos } from "@/hooks/useMemoQueries";
-import { useUserStats } from "@/hooks/useUserQueries";
 import type { Memo } from "@/types/proto/api/v1/memo_service_pb";
 
 interface WeatherData {
@@ -97,29 +95,20 @@ export const PersonalDashboard = () => {
     return "Anh Chiều"; // Hardcoded fallback for this user
   }, [user]);
 
-  const { data: userStats, isLoading: isLoadingStats } = useUserStats(user?.name);
-
-  const activityStats = useMemo(() => {
-    const stats: Record<string, number> = {};
-    if (userStats) {
-      Object.keys(userStats).forEach((key) => {
-        const val = (userStats as any)[key];
-        stats[key] = val?.length ? val.length : val;
-      });
-    }
-    return stats;
-  }, [userStats]);
-
-  const maxCount = useMemo(() => {
-    const counts = Object.values(activityStats);
-    return counts.length > 0 ? Math.max(...(counts as number[])) : 1;
-  }, [activityStats]);
-
   const { data: memosResponse } = useMemos({});
   const memoList = useMemo(() => memosResponse?.memos || [], [memosResponse]);
 
+  // Detect tasks from:
+  // 1. Memos containing markdown checkboxes `- [ ]`
+  // 2. Memos tagged #task or #doing (that aren't marked #done)
   const pendingTodos = useMemo(() => {
-    return memoList.filter((memo: Memo) => memo.content.includes("- [ ]")).slice(0, 5);
+    return memoList.filter((memo: Memo) => {
+      const content = memo.content;
+      const hasCheckbox = content.includes("- [ ]");
+      const hasTaskTag = /#task\b/.test(content) || /#doing\b/.test(content);
+      const isDone = /#done\b/.test(content);
+      return (hasCheckbox || hasTaskTag) && !isDone;
+    }).slice(0, 8);
   }, [memoList]);
 
   const WeatherIcon = weather?.icon === "rain" ? CloudRainIcon : weather?.icon === "cloud" ? CloudIcon : SunIcon;
@@ -161,58 +150,41 @@ export const PersonalDashboard = () => {
         </div>
       </div>
 
-      {/* Info Panels */}
-      <div className="flex-1 flex flex-col gap-4">
-
-        {/* To-Do Widget */}
-        <div className="bg-card border border-border rounded-2xl p-4 shadow-sm h-32 overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-bold text-sm tracking-wide text-foreground flex items-center gap-1.5 uppercase">
-               <CheckCircle className="w-4 h-4 text-emerald-500" />
-               Việc cần làm
-            </h3>
-            <span className="text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 px-2 py-0.5 rounded-full">
-               {pendingTodos.length} Tasks
-            </span>
-          </div>
-          <div className="flex-1 overflow-y-auto no-scrollbar space-y-2">
-            {pendingTodos.length === 0 ? (
-               <div className="h-full flex items-center justify-center text-sm text-muted-foreground italic opacity-70">
-                 Không có công việc nào đang rảnh rang! 🎉
-               </div>
-            ) : (
-               pendingTodos.map((memo: Memo) => {
-                 const taskLine = memo.content.split('\n').find((line: string) => line.includes('- [ ]'))?.replace('- [ ]', '').trim() || "Công việc...";
-                 return (
-                   <div key={memo.name} className="flex items-start gap-2 group">
-                      <Circle className="w-4 h-4 text-border mt-0.5 cursor-pointer hover:text-emerald-500 transition-colors shrink-0" />
-                      <Link to={`/m/${memo.name.split('/')[1]}`} className="text-sm text-foreground/80 line-clamp-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                        {taskLine.substring(0, 40)}{taskLine.length > 40 ? '...' : ''}
-                      </Link>
-                   </div>
-                 )
-               })
-            )}
-          </div>
+      {/* To-Do Widget — single info panel now */}
+      <div className="flex-1 bg-card border border-border rounded-2xl p-4 shadow-sm flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-bold text-sm tracking-wide text-foreground flex items-center gap-1.5 uppercase">
+             <CheckCircle className="w-4 h-4 text-emerald-500" />
+             Việc cần làm
+          </h3>
+          <span className="text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 px-2 py-0.5 rounded-full">
+             {pendingTodos.length} Tasks
+          </span>
         </div>
-
-        {/* Heatmap Widget */}
-        <div className="bg-card border border-border rounded-2xl p-4 shadow-sm flex-1 flex flex-col justify-center">
-          <div className="flex items-center justify-between mb-1">
-             <h3 className="font-bold text-sm tracking-wide text-foreground flex items-center gap-1.5 uppercase">
-               <Clock className="w-4 h-4 text-blue-500" />
-               Nhật ký hoạt động
-            </h3>
-          </div>
-          <div className="flex-1 flex items-center justify-center opacity-90 scale-95 origin-top">
-            {isLoadingStats ? (
-               <LoaderIcon className="animate-spin text-muted-foreground" />
-            ) : (
-               <MonthCalendar month={dayjs().format("YYYY-MM")} data={activityStats} maxCount={maxCount} size="small" disableTooltips />
-            )}
-          </div>
+        <div className="flex-1 overflow-y-auto no-scrollbar space-y-2">
+          {pendingTodos.length === 0 ? (
+             <div className="h-full flex items-center justify-center text-sm text-muted-foreground italic opacity-70">
+               Không có công việc nào đang rảnh rang! 🎉
+               <br />
+               <span className="text-xs mt-1 block text-center">Viết note chứa <code className="bg-muted px-1 rounded">- [ ]</code> hoặc tag <code className="bg-muted px-1 rounded">#task</code> / <code className="bg-muted px-1 rounded">#doing</code></span>
+             </div>
+          ) : (
+             pendingTodos.map((memo: Memo) => {
+               // Extract task line: prefer `- [ ] ...` line, fallback to first line
+               const taskLine = memo.content.split('\n').find((line: string) => line.includes('- [ ]'))?.replace('- [ ]', '').trim()
+                 || memo.content.split('\n').find((line: string) => !line.startsWith('#') || line.startsWith('# '))?.trim()
+                 || "Công việc...";
+               return (
+                 <div key={memo.name} className="flex items-start gap-2 group">
+                    <Circle className="w-4 h-4 text-border mt-0.5 cursor-pointer hover:text-emerald-500 transition-colors shrink-0" />
+                    <Link to={`/${memo.name}`} className="text-sm text-foreground/80 line-clamp-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                      {taskLine.substring(0, 60)}{taskLine.length > 60 ? '...' : ''}
+                    </Link>
+                 </div>
+               )
+             })
+          )}
         </div>
-
       </div>
 
     </div>

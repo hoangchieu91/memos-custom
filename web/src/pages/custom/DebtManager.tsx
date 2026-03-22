@@ -253,7 +253,7 @@ const DebtManager = () => {
   }
 
   return (
-    <div className="w-full min-h-screen bg-background text-foreground px-4 py-6 max-w-4xl mx-auto">
+    <div className="w-full min-h-screen bg-background text-foreground px-4 py-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-4">
         <h1 className="text-2xl font-bold flex items-center gap-2">

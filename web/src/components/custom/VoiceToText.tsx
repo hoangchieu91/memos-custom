@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MicIcon, MicOffIcon, LoaderIcon, SendIcon, XIcon } from "lucide-react";
+import { MicIcon, MicOffIcon, SendIcon, XIcon } from "lucide-react";
 import { useCreateMemo } from "@/hooks/useMemoQueries";
 import toast from "react-hot-toast";
 

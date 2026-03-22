@@ -1,5 +1,17 @@
 import { useState, useCallback } from "react";
-import { SparklesIcon, XIcon, LoaderIcon, FileTextIcon, CheckCircleIcon, LanguagesIcon, CopyIcon } from "lucide-react";
+import {
+  SparklesIcon,
+  XIcon,
+  LoaderIcon,
+  FileTextIcon,
+  CheckCircleIcon,
+  LanguagesIcon,
+  CopyIcon,
+  TagIcon,
+  ArrowUpRightIcon,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import { useUpdateMemo } from "@/hooks/useMemoQueries";
 
 const OLLAMA_URL = "http://10.25.7.111:11434";
 const CHAT_MODEL = "qwen2.5:7b";
@@ -9,7 +21,7 @@ interface AiMagicButtonProps {
   memoName: string;
 }
 
-type ActionType = "summarize" | "fix" | "translate";
+type ActionType = "summarize" | "fix" | "translate" | "autotag";
 
 const ACTIONS: { type: ActionType; label: string; icon: React.ReactNode; prompt: string }[] = [
   {
@@ -30,6 +42,13 @@ const ACTIONS: { type: ActionType; label: string; icon: React.ReactNode; prompt:
     icon: <LanguagesIcon className="w-4 h-4" />,
     prompt: "Dịch nội dung sau. Nếu là tiếng Việt thì dịch sang tiếng Anh, nếu là tiếng Anh thì dịch sang tiếng Việt. Chỉ trả về bản dịch:\n\n",
   },
+  {
+    type: "autotag",
+    label: "Gắn tag",
+    icon: <TagIcon className="w-4 h-4" />,
+    prompt:
+      `Phân tích nội dung sau và gợi ý các hashtag phù hợp (dùng format #tag). Chỉ trả về danh sách tag, mỗi tag trên 1 dòng. Các tag nên ngắn gọn, tiếng Việt không dấu hoặc tiếng Anh. Ví dụ: #expense, #checkin, #task, #idea, #meeting, #finance, #personal, #tech, #review, #ai/idea. Nội dung:\n\n`,
+  },
 ];
 
 export const AiMagicButton = ({ content, memoName }: AiMagicButtonProps) => {
@@ -38,6 +57,7 @@ export const AiMagicButton = ({ content, memoName }: AiMagicButtonProps) => {
   const [result, setResult] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<ActionType | null>(null);
   const [copied, setCopied] = useState(false);
+  const { mutateAsync: updateMemo } = useUpdateMemo();
 
   const handleAction = useCallback(
     async (action: (typeof ACTIONS)[0]) => {
@@ -99,6 +119,53 @@ export const AiMagicButton = ({ content, memoName }: AiMagicButtonProps) => {
     }
   }, [result]);
 
+  // Apply AI result to memo (replace or append)
+  const handleApply = useCallback(async () => {
+    if (!result || !memoName) return;
+
+    try {
+      let newContent = content;
+
+      if (activeAction === "autotag") {
+        // For auto-tag: append tags to existing content
+        const tags = result
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => l.startsWith("#"))
+          .join(" ");
+        if (tags) {
+          // Remove any existing duplicate tags
+          const existingTags = new Set(content.match(/#\w[\w/]*/g) || []);
+          const newTags = tags
+            .split(" ")
+            .filter((t) => !existingTags.has(t))
+            .join(" ");
+          if (newTags) {
+            newContent = content.trimEnd() + "\n" + newTags;
+          } else {
+            toast.success("Tất cả tag đã có sẵn!");
+            return;
+          }
+        }
+      } else if (activeAction === "fix" || activeAction === "translate") {
+        // For fix/translate: replace entire content
+        newContent = result;
+      } else {
+        // For summarize: append summary below
+        newContent = content.trimEnd() + "\n\n---\n📝 **Tóm tắt:** " + result;
+      }
+
+      await updateMemo({
+        update: { name: memoName, content: newContent },
+        updateMask: ["content"],
+      });
+      toast.success("✅ Đã cập nhật memo!");
+      handleClose();
+    } catch {
+      toast.error("Lỗi cập nhật memo");
+    }
+  }, [result, content, memoName, activeAction, updateMemo]);
+
   const handleClose = () => {
     setIsOpen(false);
     setResult(null);
@@ -129,7 +196,7 @@ export const AiMagicButton = ({ content, memoName }: AiMagicButtonProps) => {
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               activeAction === action.type
                 ? "bg-violet-600 text-white"
-                : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-violet-100 dark:hover:bg-violet-900/40 border border-gray-200 dark:border-gray-700"
+                : "bg-white dark:bg-zinc-700 text-gray-700 dark:text-gray-200 hover:bg-violet-100 dark:hover:bg-violet-900/40 border border-gray-200 dark:border-gray-600"
             }`}
           >
             {isLoading && activeAction === action.type ? <LoaderIcon className="w-3 h-3 animate-spin" /> : action.icon}
@@ -144,15 +211,31 @@ export const AiMagicButton = ({ content, memoName }: AiMagicButtonProps) => {
 
       {/* Result */}
       {result && (
-        <div className="relative bg-white dark:bg-gray-900 rounded-lg p-3 text-sm text-foreground whitespace-pre-wrap border border-gray-100 dark:border-gray-800">
+        <div className="relative rounded-lg p-3 text-sm whitespace-pre-wrap bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-100 border border-violet-200 dark:border-violet-700 shadow-sm">
           {result}
-          <button
-            onClick={handleCopy}
-            className="absolute top-2 right-2 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600"
-            title="Copy"
-          >
-            {copied ? <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" /> : <CopyIcon className="w-3.5 h-3.5" />}
-          </button>
+
+          {/* Action buttons row */}
+          <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-gray-100 dark:border-gray-700">
+            {/* Apply button */}
+            <button
+              onClick={handleApply}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-white transition-colors shadow-sm"
+              title="Áp dụng kết quả vào memo"
+            >
+              <ArrowUpRightIcon className="w-3.5 h-3.5" />
+              Áp dụng
+            </button>
+
+            {/* Copy button */}
+            <button
+              onClick={handleCopy}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-zinc-700 hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-600 dark:text-gray-300 transition-colors"
+              title="Sao chép"
+            >
+              {copied ? <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" /> : <CopyIcon className="w-3.5 h-3.5" />}
+              {copied ? "Đã chép" : "Sao chép"}
+            </button>
+          </div>
         </div>
       )}
     </div>

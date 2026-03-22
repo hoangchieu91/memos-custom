@@ -1,7 +1,8 @@
 import { memo, useMemo } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { getLunarLabel, getLunarTooltip } from "@/lib/lunar-calendar";
+import { getLunarLabel, getLunarTooltip, getLunarHoliday } from "@/lib/lunar-calendar";
+import type { LunarHoliday } from "@/lib/lunar-calendar";
 import { DEFAULT_CELL_SIZE, SMALL_CELL_SIZE } from "./constants";
 import type { CalendarDayCell, CalendarSize } from "./types";
 import { getCellIntensityClass } from "./utils";
@@ -18,8 +19,13 @@ export interface CalendarCellProps {
 export const CalendarCell = memo((props: CalendarCellProps) => {
   const { day, maxCount, tooltipText, onClick, size = "default", disableTooltip = false } = props;
 
-  // Parse date for lunar calculation
-  const lunarInfo = useMemo(() => {
+  // Parse date for lunar calculation + holiday detection
+  const lunarInfo = useMemo<{
+    label: string;
+    tooltip: string;
+    isFirstDay: boolean;
+    holiday: LunarHoliday | null;
+  } | null>(() => {
     if (!day.isCurrentMonth) return null;
     const parts = day.date.split("-");
     if (parts.length !== 3) return null;
@@ -28,11 +34,11 @@ export const CalendarCell = memo((props: CalendarCellProps) => {
       label: getLunarLabel(dd, mm, yy),
       tooltip: getLunarTooltip(dd, mm, yy),
       isFirstDay: getLunarLabel(dd, mm, yy).includes("/"),
+      holiday: getLunarHoliday(dd, mm, yy),
     };
   }, [day.date, day.isCurrentMonth]);
 
   const handleClick = () => {
-    // Allow clicking on ANY date (not just days with memos)
     if (onClick) {
       onClick(day.date);
     }
@@ -42,7 +48,7 @@ export const CalendarCell = memo((props: CalendarCellProps) => {
   const smallExtraClasses = size === "small" ? `${SMALL_CELL_SIZE.dimensions} min-h-0` : "";
 
   const baseClasses = cn(
-    "aspect-square w-full flex flex-col items-center justify-center text-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 select-none border border-border/10 bg-muted/20",
+    "aspect-square w-full flex flex-col items-center justify-center text-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 select-none border border-border/10 bg-muted/20 relative",
     sizeConfig.font,
     sizeConfig.borderRadius,
     smallExtraClasses,
@@ -55,12 +61,14 @@ export const CalendarCell = memo((props: CalendarCellProps) => {
   }
 
   const intensityClass = getCellIntensityClass(day, maxCount);
+  const holiday = lunarInfo?.holiday;
 
   const buttonClasses = cn(
     baseClasses,
     intensityClass,
     day.isToday && "ring-2 ring-primary/30 ring-offset-1 font-semibold z-10",
     day.isSelected && "ring-2 ring-primary ring-offset-1 font-bold z-10",
+    holiday?.type === "major" && "ring-1 ring-red-500/40 bg-red-500/5",
     isInteractive ? "cursor-pointer hover:bg-muted/40 hover:border-border/30" : "cursor-default",
   );
 
@@ -83,10 +91,15 @@ export const CalendarCell = memo((props: CalendarCellProps) => {
       {lunarInfo && size !== "small" && (
         <span className={cn(
           "text-[7px] leading-none mt-0.5 opacity-60",
-          lunarInfo.isFirstDay && "text-red-500 font-bold opacity-100"
+          lunarInfo.isFirstDay && "text-red-500 font-bold opacity-100",
+          holiday?.type === "major" && "text-red-500 font-bold opacity-100",
         )}>
-          {lunarInfo.label}
+          {holiday?.type === "major" ? holiday.emoji : lunarInfo.label}
         </span>
+      )}
+      {/* Minor holiday dot indicator (Rằm not already styled as first day) */}
+      {holiday?.type === "minor" && !lunarInfo?.isFirstDay && size !== "small" && (
+        <span className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-full bg-amber-400/80" />
       )}
     </button>
   );

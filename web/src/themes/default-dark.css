@@ -1,43 +1,53 @@
 :root {
-  /* Surfaces — layered from darkest to lightest, consistent cool-slate tint */
-  --background: oklch(0.09 0.006 265);
-  --foreground: oklch(0.82 0.005 265);
+  /* ================================================================
+     DARK THEME — Navy Professional (TSE Energy Monitor)
+     
+     TSE hex → oklch hue mapping:
+     #0a1929 (HSL 211) → oklch hue ~230 (NOT 245 which is indigo)
+     #001e3c (HSL 210) → oklch hue ~230
+     #1e4976 (HSL 211) → oklch hue ~230
+     #1976d2 (HSL 210) → oklch hue ~235
+     ================================================================ */
 
-  --card: oklch(0.13 0.006 265);
-  --card-foreground: oklch(0.82 0.005 265);
+  /* Surfaces — deep navy background (hue 230 = pure blue in oklch) */
+  --background: oklch(0.14 0.035 230);
+  --foreground: oklch(0.95 0.005 240);
 
-  /* Popovers float above cards — slightly lighter to appear elevated */
-  --popover: oklch(0.17 0.006 265);
-  --popover-foreground: oklch(0.82 0.005 265);
+  --card: oklch(0.18 0.045 230);
+  --card-foreground: oklch(0.95 0.005 240);
 
-  /* Primary — bright blue, clearly interactive in dark context */
-  --primary: oklch(0.65 0.15 250);
-  --primary-foreground: oklch(0.98 0.003 265);
+  /* Popovers — higher elevation */
+  --popover: oklch(0.22 0.04 230);
+  --popover-foreground: oklch(0.95 0.005 240);
 
-  /* Secondary — subtle elevated surface for secondary buttons */
-  --secondary: oklch(0.19 0.007 265);
-  --secondary-foreground: oklch(0.82 0.005 265);
+  /* Primary — MUI Blue (#1976d2) */
+  --primary: oklch(0.58 0.16 235);
+  --primary-foreground: oklch(0.98 0.003 240);
 
-  /* Muted — inline backgrounds (code, skeletons, error panels) */
-  --muted: oklch(0.21 0.008 265);
-  --muted-foreground: oklch(0.56 0.005 265);
+  /* Secondary — subtle navy */
+  --secondary: oklch(0.22 0.035 230);
+  --secondary-foreground: oklch(0.85 0.005 240);
 
-  /* Accent — hover states, slightly more chromatic than muted to feel interactive */
-  --accent: oklch(0.22 0.012 265);
-  --accent-foreground: oklch(0.88 0.005 265);
+  /* Muted — placeholders, inline code */
+  --muted: oklch(0.20 0.035 230);
+  --muted-foreground: oklch(0.72 0.01 240);
 
-  /* Destructive — vivid red, clearly visible on dark surfaces */
-  --destructive: oklch(0.62 0.2 22);
-  --destructive-foreground: oklch(0.98 0.003 265);
+  /* Accent — hover/active */
+  --accent: oklch(0.24 0.045 230);
+  --accent-foreground: oklch(0.92 0.005 240);
 
-  /* Borders — --border for layout dividers, --input for form field borders */
-  --border: oklch(0.21 0.007 265);
-  --input: oklch(0.25 0.007 265);
-  --ring: oklch(0.65 0.15 250);
+  /* Destructive */
+  --destructive: oklch(0.58 0.18 22);
+  --destructive-foreground: oklch(0.98 0.003 240);
 
-  /* Sidebar — darkest surface, distinct from background */
-  --sidebar: oklch(0.07 0.005 265);
-  --sidebar-foreground: oklch(0.68 0.005 265);
-  --sidebar-accent: oklch(0.19 0.01 265);
-  --sidebar-accent-foreground: oklch(0.84 0.005 265);
+  /* Borders — navy blue (#1e4976) */
+  --border: oklch(0.34 0.06 230);
+  --input: oklch(0.30 0.05 230);
+  --ring: oklch(0.58 0.16 235);
+
+  /* Sidebar — deepest navy */
+  --sidebar: oklch(0.12 0.03 230);
+  --sidebar-foreground: oklch(0.80 0.005 240);
+  --sidebar-accent: oklch(0.24 0.05 230);
+  --sidebar-accent-foreground: oklch(0.92 0.005 240);
 }

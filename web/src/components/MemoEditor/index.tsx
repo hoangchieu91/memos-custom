@@ -1,8 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState, useMemo, useEffect } from "react";
 import { toast } from "react-hot-toast";
-import { CalendarIcon, LoaderIcon, SparklesIcon, XIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CalendarIcon, SparklesIcon, XIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { memoKeys } from "@/hooks/useMemoQueries";
@@ -26,80 +25,6 @@ const MemoEditor = (props: MemoEditorProps) => (
     <MemoEditorImpl {...props} />
   </EditorProvider>
 );
-
-const QuickCheckinMenu = ({ onSave, editorRef }: { onSave: () => void, editorRef: React.RefObject<EditorRefActions> }) => {
-  const { dispatch, actions } = useEditorContext();
-  const [loadingAction, setLoadingAction] = useState<string | null>(null);
-
-  const handleAction = (label: string, icon: string) => {
-    if (!navigator.geolocation) {
-      toast.error("Trình duyệt không hỗ trợ Geolocation.");
-      return;
-    }
-    setLoadingAction(label);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-          let address = "Vị trí không xác định";
-          try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
-            const data = await res.json();
-            address = data.display_name || address;
-          } catch(e) {}
-          const mapLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
-          
-          const content = `#checkin Thực hiện: ${icon} **${label}**\n📍 Tại: ${address}\n[Google Maps](${mapLink})`;
-          
-          if (editorRef.current) {
-            editorRef.current.setContent(content);
-            dispatch(actions.updateContent(content));
-            
-            setTimeout(() => {
-              onSave();
-              setLoadingAction(null);
-            }, 100);
-          }
-        } catch (e) {
-          toast.error("Lỗi lấy địa chỉ.");
-          setLoadingAction(null);
-        }
-      },
-      (error) => {
-        let errorMessage = "Lỗi GPS: " + error.message;
-        if (error.code === error.PERMISSION_DENIED) errorMessage = "Vui lòng cho phép quyền truy cập Vị trí.";
-        toast.error(errorMessage);
-        setLoadingAction(null);
-      }
-    );
-  };
-
-  const buttons = [
-    { label: "Đến cty", icon: "🏢" },
-    { label: "Rời cty", icon: "🚗" },
-    { label: "Về nhà", icon: "🏠" },
-    { label: "Ra khỏi nhà", icon: "🚶" },
-    { label: "Tới dự án", icon: "🚧" },
-    { label: "Rời dự án", icon: "🏁" },
-  ];
-
-  return (
-    <div className="w-full grid grid-cols-3 sm:grid-cols-6 gap-2 mb-2 p-1 bg-gray-50 dark:bg-zinc-900 rounded-md border border-gray-100 dark:border-zinc-800">
-      {buttons.map((btn) => (
-        <Button
-          key={btn.label}
-          variant="outline"
-          className="h-10 text-xs sm:text-sm font-semibold border-gray-200 dark:border-gray-700 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 shadow-sm text-gray-800 dark:text-gray-200"
-          onClick={() => handleAction(btn.label, btn.icon)}
-          disabled={loadingAction !== null}
-        >
-          {loadingAction === btn.label ? <LoaderIcon className="size-4 animate-spin text-gray-400" /> : <span className="mr-1">{btn.icon}</span>}
-          {btn.label}
-        </Button>
-      ))}
-    </div>
-  );
-};
 
 const MemoEditorImpl: React.FC<MemoEditorProps> = ({
   className,
@@ -292,11 +217,6 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
           <div className="w-full -mb-1">
             <TimestampPopover />
           </div>
-        )}
-
-        {/* Quick Check-in Buttons grid only for home page */}
-        {cacheKey === "home-memo-editor" && (
-          <QuickCheckinMenu onSave={handleSave} editorRef={editorRef} />
         )}
 
         {/* Editor content grows to fill available space in focus mode */}

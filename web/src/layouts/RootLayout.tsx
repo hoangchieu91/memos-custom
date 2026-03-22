@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Outlet, useLocation, useSearchParams } from "react-router-dom";
 import usePrevious from "react-use/lib/usePrevious";
 import Navigation from "@/components/Navigation";
 import AiChatPanel from "@/components/custom/AiChatPanel";
+import FocusZenMode from "@/components/custom/FocusZenMode";
+import FloatingHub from "@/components/custom/FloatingHub";
 import { useInstance } from "@/contexts/InstanceContext";
 import { useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
@@ -27,6 +29,15 @@ const RootLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const edgeTouchStartX = useRef(0);
   const edgeTouchStartY = useRef(0);
+
+  // FloatingHub panel state
+  const [aiOpen, setAiOpen] = useState(false);
+  const [focusOpen, setFocusOpen] = useState(false);
+
+  const handleOpenAI = useCallback(() => setAiOpen(true), []);
+  const handleCloseAI = useCallback(() => setAiOpen(false), []);
+  const handleOpenFocus = useCallback(() => setFocusOpen(true), []);
+  const handleCloseFocus = useCallback(() => setFocusOpen(false), []);
 
   useEffect(() => {
     if (!currentUser) {
@@ -105,7 +116,7 @@ const RootLayout = () => {
   }, []);
 
   return (
-    <div className={cn("w-full min-h-full flex flex-row justify-center items-start", sm && (navCollapsed ? "sm:pl-16" : "sm:pl-52"))}>
+    <div className={cn("w-full min-h-full flex flex-row justify-center items-start", sm && (navCollapsed ? "sm:pl-16" : "sm:pl-64"))}>
       {/* Desktop sidebar — width driven by click-toggle state */}
       {sm && (
         <div
@@ -113,7 +124,7 @@ const RootLayout = () => {
             "flex flex-col justify-start items-start fixed top-0 left-0 select-none h-full bg-sidebar z-50",
             "transition-[width] duration-200 ease-in-out overflow-hidden",
             "border-r border-border",
-            navCollapsed ? "w-16" : "w-52",
+            navCollapsed ? "w-16" : "w-64",
           )}
         >
           <Navigation className="py-4 md:pt-6 w-full" />
@@ -148,7 +159,13 @@ const RootLayout = () => {
       <main className="w-full h-auto grow shrink flex flex-col justify-start items-center">
         <Outlet />
       </main>
-      {currentUser && <AiChatPanel />}
+      {currentUser && (
+        <>
+          <FloatingHub onOpenAI={handleOpenAI} onOpenFocus={handleOpenFocus} />
+          <AiChatPanel externalOpen={aiOpen} onExternalClose={handleCloseAI} />
+          <FocusZenMode externalOpen={focusOpen} onExternalClose={handleCloseFocus} />
+        </>
+      )}
     </div>
   );
 };

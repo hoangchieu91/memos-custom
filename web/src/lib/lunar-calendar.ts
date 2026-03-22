@@ -167,6 +167,56 @@ export function solarToLunar(dd: number, mm: number, yy: number, timeZone: numbe
   };
 }
 
+// ============================================================================
+// Vietnamese Lunar Holidays
+// ============================================================================
+
+export interface LunarHoliday {
+  name: string;
+  emoji: string;
+  type: "major" | "minor";
+}
+
+/**
+ * Map of known Vietnamese lunar holidays.
+ * Key format: "month-day"
+ */
+const LUNAR_HOLIDAYS: Record<string, LunarHoliday> = {
+  // ── Tết Nguyên Đán ──
+  "1-1":  { name: "Tết Nguyên Đán",       emoji: "🧧", type: "major" },
+  "1-2":  { name: "Mùng 2 Tết",           emoji: "🧧", type: "major" },
+  "1-3":  { name: "Mùng 3 Tết",           emoji: "🧧", type: "major" },
+  // ── Các ngày lễ lớn ──
+  "1-15": { name: "Rằm tháng Giêng",      emoji: "🏮", type: "major" },
+  "3-10": { name: "Giỗ Tổ Hùng Vương",    emoji: "🇻🇳", type: "major" },
+  "4-15": { name: "Lễ Phật Đản",          emoji: "🪷",  type: "major" },
+  "5-5":  { name: "Tết Đoan Ngọ",         emoji: "🍃", type: "major" },
+  "7-15": { name: "Vu Lan / Rằm tháng 7", emoji: "🪻", type: "major" },
+  "8-15": { name: "Tết Trung Thu",         emoji: "🥮", type: "major" },
+  "12-23":{ name: "Ông Táo về Trời",      emoji: "🔥", type: "major" },
+  "12-30":{ name: "Tất Niên (Giao thừa)",  emoji: "🎆", type: "major" },
+};
+
+/**
+ * Get lunar holiday info for a given solar date, or null if not a holiday.
+ * Also flags Mùng 1 and Rằm (15th) of every lunar month as minor events.
+ */
+export function getLunarHoliday(dd: number, mm: number, yy: number): LunarHoliday | null {
+  const lunar = solarToLunar(dd, mm, yy);
+  // Check named holidays first
+  const key = `${lunar.month}-${lunar.day}`;
+  const named = LUNAR_HOLIDAYS[key];
+  if (named) return named;
+  // Recurring minor events
+  if (lunar.day === 1) return { name: `Mùng 1 tháng ${lunar.month}`, emoji: "🌑", type: "minor" };
+  if (lunar.day === 15) return { name: `Rằm tháng ${lunar.month}`, emoji: "🌕", type: "minor" };
+  return null;
+}
+
+// ============================================================================
+// Display Helpers
+// ============================================================================
+
 /**
  * Get a short lunar label for display in calendar cells.
  * Shows "1/M" on the first day of each lunar month, otherwise just the day number.
@@ -180,11 +230,16 @@ export function getLunarLabel(dd: number, mm: number, yy: number): string {
 }
 
 /**
- * Get the full lunar date string (e.g., "15/01 Âm" or "Mùng 1/02 Nhuận")
+ * Get the full lunar date string, including holiday name when applicable.
  */
 export function getLunarTooltip(dd: number, mm: number, yy: number): string {
   const lunar = solarToLunar(dd, mm, yy);
   const dayStr = lunar.day <= 10 ? `Mùng ${lunar.day}` : `${lunar.day}`;
   const leapStr = lunar.leap ? " (Nhuận)" : "";
-  return `Âm: ${dayStr} tháng ${lunar.month}${leapStr}`;
+  let tip = `Âm: ${dayStr} tháng ${lunar.month}${leapStr}`;
+  const holiday = getLunarHoliday(dd, mm, yy);
+  if (holiday) {
+    tip += ` · ${holiday.emoji} ${holiday.name}`;
+  }
+  return tip;
 }

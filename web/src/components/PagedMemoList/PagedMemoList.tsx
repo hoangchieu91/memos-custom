@@ -1,20 +1,17 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { matchPath } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { userServiceClient } from "@/connect";
 import { useView } from "@/contexts/ViewContext";
 import { DEFAULT_LIST_MEMOS_PAGE_SIZE } from "@/helpers/consts";
 import { useInfiniteMemos } from "@/hooks/useMemoQueries";
 import { userKeys } from "@/hooks/useUserQueries";
-import { Routes } from "@/router";
 import { State } from "@/types/proto/api/v1/common_pb";
 import type { Memo } from "@/types/proto/api/v1/memo_service_pb";
 
 // Removed useTranslate as it's no longer used
 import type { MemoRenderContext } from "../MasonryView";
 import MasonryView from "../MasonryView";
-import MemoEditor from "../MemoEditor";
 import MemoFilters from "../MemoFilters";
 import Skeleton from "../Skeleton";
 
@@ -83,9 +80,6 @@ function useAutoFetchWhenNotScrollable({
 const PagedMemoList = (props: Props) => {
   const { layout } = useView();
   const queryClient = useQueryClient();
-
-  // Show memo editor only on the root route
-  const showMemoEditor = Boolean(matchPath(Routes.ROOT, window.location.pathname));
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteMemos(
     {
@@ -168,7 +162,7 @@ const PagedMemoList = (props: Props) => {
       ) : (
         <>
           {/* LOAD MORE TOP: Loading indicator for pagination (Chat style) */}
-          <div className="w-full flex justify-center items-center py-4 mb-4 border-b border-gray-100 dark:border-gray-800">
+          <div className="w-full flex justify-center items-center py-4 mb-4 border-b border-border">
             {isFetchingNextPage ? (
                <Skeleton showCreator={props.showCreator} count={2} />
             ) : hasNextPage ? (

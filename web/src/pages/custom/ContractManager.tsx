@@ -120,7 +120,7 @@ const ContractManager = () => {
   const totalValue = contracts.filter((c) => c.status !== "cancelled").reduce((s, c) => s + c.value, 0);
 
   return (
-    <div className="w-full min-h-screen bg-background text-foreground px-4 py-6 max-w-5xl mx-auto">
+    <div className="w-full min-h-screen bg-background text-foreground px-4 py-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

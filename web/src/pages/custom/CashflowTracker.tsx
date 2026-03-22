@@ -9,6 +9,7 @@ import {
   GiftIcon,
   HeartIcon,
   LoaderIcon,
+  PackageIcon,
   PencilIcon,
   PlusIcon,
   SearchIcon,
@@ -21,24 +22,152 @@ import {
   WalletIcon,
   WrenchIcon,
   ZapIcon,
+  XIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
-import { useInfiniteMemos } from "@/hooks/useMemoQueries";
+import { useInfiniteMemos, useUpdateMemo, memoKeys } from "@/hooks/useMemoQueries";
+import { useQueryClient } from "@tanstack/react-query";
 import { State } from "@/types/proto/api/v1/common_pb";
 import toast from "react-hot-toast";
 
 // ============================================================================
-// Price Parsing (Same as AssetManager/DebtManager)
+// NocoDB Config (shared with AssetManager)
 // ============================================================================
 
+const NOCODB_DIRECT = "http://10.25.7.212:8080";
+const NOCODB_TOKEN = "_TMGGkbPEWQa_hO82Kn3BjJi3DWbPiQDTnBumzPg";
+const NOCODB_TABLE = "mef80lq7kymhvtc";
+const NOCODB_BASE_ID = "pakf4lho7c3mxzs";
+
+function nocoUrl(path: string) {
+  return `${NOCODB_DIRECT}/api/v1/db/data/noco/${NOCODB_BASE_ID}/${NOCODB_TABLE}${path}`;
+}
+const nocoHeaders = { "xc-token": NOCODB_TOKEN, "Content-Type": "application/json" };
+
+const ASSET_CATEGORIES = ["Điện tử", "Nội thất", "Phần mềm", "Dụng cụ", "Xe cộ", "Văn phòng", "Khác"];
+const ASSET_STATUSES: Record<string, string> = {
+  active: "Đang dùng", stored: "Lưu kho", lent: "Cho mượn", warranty: "Bảo hành",
+  sold: "Đã bán", gifted: "Đã tặng", broken: "Hỏng", lost: "Thất lạc",
+};
+
+// ============================================================================
+// Price Parsing V2 — Extracts unitPrice, quantity, total separately
+// ============================================================================
+
+interface PriceDetails {
+  unitPrice: number;   // đơn giá per item
+  quantity: number;    // số lượng
+  total: number;       // tổng tiền (actual spend, includes ship/discounts)
+}
+
+/** Extract a VND amount from a text fragment like "259k", "1.2 tr", "490000đ" */
+function extractAmount(text: string): number {
+  const patterns: [RegExp, number][] = [
+    [/([\d]+(?:[.,]\d+)?)\s*(?:triệu|tr)\b/i, 1_000_000],
+    [/([\d]+(?:[.,]\d+)?)\s*k\b/i, 1_000],
+    [/([\d]+(?:[.,]\d+)?)\s*(?:tỷ|ty)\b/i, 1_000_000_000],
+    [/([\d]+(?:[.,]\d+)?)\s*(?:đ|VND|vnđ|đồng)\b/i, 1],
+  ];
+  for (const [regex, multiplier] of patterns) {
+    const match = text.match(regex);
+    if (match) {
+      const numStr = match[1].replace(/,/g, ".");
+      const num = parseFloat(numStr);
+      if (!isNaN(num)) return Math.round(num * multiplier);
+    }
+  }
+  // Try bare number with context
+  const bareMatch = text.match(/([\d]+(?:[.,]\d+)?)/);
+  if (bareMatch) {
+    const num = parseFloat(bareMatch[1].replace(/,/g, "."));
+    if (!isNaN(num) && num >= 1) {
+      // Guess unit: <100 likely means "k" in VN context
+      if (num < 100 && /giá|tổng|chi/i.test(text)) return Math.round(num * 1000);
+      return Math.round(num);
+    }
+  }
+  return 0;
+}
+
+function parsePriceDetails(text: string): PriceDetails {
+  let unitPrice = 0;
+  let quantity = 1;
+  let total = 0;
+
+  // Normalize: join lines for multi-line memos, work line by line for multi-item
+  const lines = text.split("\n");
+
+  // For each line, try to extract pricing info
+  for (const line of lines) {
+    // Skip tag-only lines
+    if (/^#\S+(\s+#\S+)*\s*$/.test(line.trim())) continue;
+
+    // 1. Look for "tổng" amount (highest priority for cashflow)
+    const totalMatch = line.match(/tổng\s*(?:cộng|tiền|:)?\s*:?\s*([\d]+(?:[.,]\d+)?)\s*(k|tr|triệu|tỷ|đ|VND|vnđ)?/i);
+    if (totalMatch) {
+      const tVal = extractAmount(totalMatch[0]);
+      if (tVal > total) total = tVal;
+    }
+
+    // 2. Look for "đơn giá" / "giá" (unit price)
+    const unitMatch = line.match(/(?:đơn\s*giá|giá)\s*:?\s*([\d]+(?:[.,]\d+)?)\s*(k|tr|triệu|tỷ|đ|VND|vnđ)?/i);
+    if (unitMatch) {
+      const uVal = extractAmount(unitMatch[0].replace(/^(?:đơn\s*)?giá\s*:?\s*/i, ""));
+      if (uVal > 0 && (unitPrice === 0 || uVal > unitPrice)) unitPrice = uVal;
+    }
+
+    // 3. Look for quantity patterns
+    const qtyPatterns = [
+      /(?:mua|đã mua|số lượng)\s+(\d+)\s*(?:bộ|cái|chiếc|cuộn|cặp|board|module|thẻ|đầu|ổ|mặt|hạt|dây|bảng)/i,
+      /(\d+)\s*(?:bộ|cái|chiếc|cuộn|cặp|board|module|thẻ|đầu|ổ|mặt|hạt|dây|bảng)\b/i,
+    ];
+    for (const qRegex of qtyPatterns) {
+      const qMatch = line.match(qRegex);
+      if (qMatch) {
+        const q = parseInt(qMatch[1]);
+        if (q > 0 && q < 1000) quantity = Math.max(quantity, q);
+      }
+    }
+  }
+
+  // If no unitPrice found, try whole text for a single "giá Xk" or just a number
+  if (unitPrice === 0 && total === 0) {
+    unitPrice = parsePrice(text);
+  }
+
+  // If total not found but we only got a single price line like "giá 490k"
+  // and no explicit "đơn giá", treat it as total
+  if (total === 0 && unitPrice > 0 && !/đơn\s*giá/i.test(text)) {
+    total = unitPrice * quantity;
+  }
+
+  return { unitPrice, quantity, total };
+}
+
+/** Cashflow amount: actual money spent (prefer tổng, which includes shipping/discounts) */
+function getCashflowAmount(text: string): number {
+  const d = parsePriceDetails(text);
+  if (d.total > 0) return d.total;
+  if (d.unitPrice > 0 && d.quantity > 0) return d.unitPrice * d.quantity;
+  return d.unitPrice;
+}
+
+/** Asset value: replacement cost = max(unitPrice × qty, total) */
+function getAssetValue(text: string): number {
+  const d = parsePriceDetails(text);
+  const computed = d.unitPrice * Math.max(d.quantity, 1);
+  return Math.max(computed, d.total);
+}
+
+/** Legacy parsePrice — fallback for simple cases */
 function parsePrice(text: string): number {
   const unitPatterns: [RegExp, number][] = [
-    [/(\d+(?:[.,]\d+)?)\s*(?:triệu|tr)/i, 1_000_000],
-    [/(\d+(?:[.,]\d+)?)\s*k/i, 1_000],
-    [/(\d+(?:[.,]\d+)?)\s*(?:tỷ|ty)/i, 1_000_000_000],
+    [/([\d]+(?:[.,]\d+)?)\s*(?:triệu|tr)\b/i, 1_000_000],
+    [/([\d]+(?:[.,]\d+)?)\s*k\b/i, 1_000],
+    [/([\d]+(?:[.,]\d+)?)\s*(?:tỷ|ty)\b/i, 1_000_000_000],
   ];
   for (const [regex, multiplier] of unitPatterns) {
     const match = text.match(regex);
@@ -49,8 +178,8 @@ function parsePrice(text: string): number {
     }
   }
   const absPatterns: [RegExp, number][] = [
-    [/(\d[\d.,]*)\s*(?:đ|VND|vnđ|đồng)/i, 1],
-    [/(?:giá|price|cost|chi phí|tổng|nhận)\s*:?\s*(\d[\d.,]*)/i, 1],
+    [/([\d][\d.,]*)\s*(?:đ|VND|vnđ|đồng)/i, 1],
+    [/(?:giá|price|cost|chi phí|tổng|nhận)\s*:?\s*([\d][\d.,]*)/i, 1],
   ];
   for (const [regex, multiplier] of absPatterns) {
     const match = text.match(regex);
@@ -78,7 +207,7 @@ type CashflowType = "income" | "expense";
 
 type CategoryKey = 
   | "salary" | "freelance" | "bonus" | "perdiem" | "other_income" // Income
-  | "food" | "coffee" | "clothing" | "transport" | "entertainment" | "health" | "education" | "gift" | "utilities" | "other_expense"; // Expense
+  | "food" | "coffee" | "clothing" | "transport" | "entertainment" | "health" | "education" | "gift" | "utilities" | "assets" | "other_expense"; // Expense
 
 interface CategoryConfig {
   type: CashflowType;
@@ -99,7 +228,7 @@ const CATEGORIES: Record<CategoryKey, CategoryConfig> = {
     color: "text-emerald-500",
     bg: "bg-emerald-500",
     emoji: "💵",
-    keywords: /\b(lương|salary|paycheck)\b/i,
+    keywords: /\b(lương|salary|paycheck)\b|#salary/i,
   },
   freelance: {
     type: "income",
@@ -219,6 +348,15 @@ const CATEGORIES: Record<CategoryKey, CategoryConfig> = {
     emoji: "🔌",
     keywords: /\b(điện|nước|internet|wifi|điện thoại|data|4g|5g|tiền nhà|thuê|phí|cước)\b/i,
   },
+  assets: {
+    type: "expense",
+    label: "Tài sản / Thiết bị",
+    icon: <PackageIcon className="w-4 h-4" />,
+    color: "text-emerald-600",
+    bg: "bg-emerald-600",
+    emoji: "📦",
+    keywords: /\b(tài sản|thiết bị|máy móc|linh kiện|phụ tùng|công cụ|dụng cụ|license|phần mềm|software|điện tử|electronics)\b/i,
+  },
   other_expense: {
     type: "expense",
     label: "Khác",
@@ -234,6 +372,7 @@ function detectCategory(text: string, tags: string[], type: CashflowType): Categ
   // Check tags first
   for (const tag of tags) {
     const t = tag.toLowerCase();
+    if (t.includes("asset") || t.includes("inventory") || t.includes("tool") || t.includes("license")) return "assets";
     for (const [key, cfg] of Object.entries(CATEGORIES)) {
       if (cfg.type === type && (t.includes(`${type}/${key}`) || t.includes(`spend/${key}`))) {
         return key as CategoryKey;
@@ -276,10 +415,23 @@ type TabType = "all" | "income" | "expense";
 
 const CashflowTracker = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { mutateAsync: updateMemo } = useUpdateMemo();
   const [tab, setTab] = useState<TabType>("all");
   const [search, setSearch] = useState("");
   const [activeCategoryTab, setActiveCategoryTab] = useState<string>("all");
   const [showZeroAmount, setShowZeroAmount] = useState(false);
+
+  // Asset creation from cashflow
+  const [assetModal, setAssetModal] = useState<CashflowEntry | null>(null);
+  const [assetName, setAssetName] = useState("");
+  const [assetCategory, setAssetCategory] = useState("Điện tử");
+  const [assetUnitPrice, setAssetUnitPrice] = useState("");
+  const [assetPrice, setAssetPrice] = useState("");
+  const [assetQty, setAssetQty] = useState("1");
+  const [assetStatus, setAssetStatus] = useState("active");
+  const [assetNotes, setAssetNotes] = useState("");
+  const [assetSaving, setAssetSaving] = useState(false);
 
   const { data, isLoading } = useInfiniteMemos({
     pageSize: 500,
@@ -297,7 +449,7 @@ const CashflowTracker = () => {
     return allMemos
       .filter((memo) => {
         const content = memo.content || "";
-        return /#(income|expense|chi|thu)/i.test(content);
+        return /#(income|expense|chi|thu|asset|inventory|tool|license|salary)/i.test(content);
       })
       .map((memo) => {
         const content = memo.content || "";
@@ -321,7 +473,7 @@ const CashflowTracker = () => {
           .trim()
           .substring(0, 120);
 
-        const amount = parsePrice(content);
+        const amount = getCashflowAmount(content);
 
         return {
           uid: name.split("/")[1] || name,
@@ -401,26 +553,67 @@ const CashflowTracker = () => {
     navigate(`/${memoName}`);
   }, [navigate]);
 
-  // Delete memo (soft-delete via API)
+  // Delete memo (soft-delete via useUpdateMemo)
   const handleDelete = useCallback(async (entry: CashflowEntry) => {
     if (!confirm(`Xóa giao dịch: ${entry.preview.substring(0, 60)}...?`)) return;
     try {
-      const res = await fetch(`/api/v1/${entry.memoName}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rowStatus: "ARCHIVED" }),
-        credentials: "include",
+      await updateMemo({
+        update: { name: entry.memoName, state: State.ARCHIVED },
+        updateMask: ["state"],
       });
-      if (res.ok) {
-        toast.success("Đã ẩn giao dịch (memo archived)");
-        window.location.reload();
-      } else {
-        toast.error("Lỗi khi xóa: " + res.statusText);
-      }
+      queryClient.invalidateQueries({ queryKey: memoKeys.lists() });
+      toast.success("Đã ẩn giao dịch (memo archived)");
     } catch (e) {
-      toast.error("Lỗi: " + e);
+      toast.error("Lỗi khi xóa: " + e);
     }
+  }, [updateMemo, queryClient]);
+
+  const openAssetModal = useCallback((entry: CashflowEntry) => {
+    setAssetModal(entry);
+    // Pre-fill: extract a reasonable name from the preview  
+    const cleanPreview = entry.preview
+      .replace(/^(Đã mua|Mua|Đặt mua|mua)\s*/i, "")
+      .replace(/\s*(đơn giá|giá|tổng|ship|phí).*/i, "")
+      .trim();
+    setAssetName(cleanPreview.substring(0, 80) || entry.preview.substring(0, 80));
+    
+    // Use parsePriceDetails for smart extraction
+    const pd = parsePriceDetails(entry.content);
+    setAssetUnitPrice(pd.unitPrice > 0 ? String(pd.unitPrice) : "");
+    setAssetPrice(pd.total > 0 ? String(pd.total) : String(entry.amount));
+    setAssetQty(pd.quantity > 1 ? String(pd.quantity) : "1");
+    setAssetCategory("Điện tử");
+    setAssetStatus("active");
+    setAssetNotes("");
   }, []);
+
+  const submitAssetFromCashflow = useCallback(async () => {
+    if (!assetModal || !assetName.trim()) return;
+    setAssetSaving(true);
+    try {
+      const memoRef = assetModal.memoName || "";
+      const payload = {
+        Name: assetName.trim(),
+        Category: assetCategory,
+        Price: Number(assetUnitPrice) || Number(assetPrice) || 0,
+        Quantity: Number(assetQty) || 1,
+        Status: assetStatus,
+        Notes: assetNotes || assetModal.preview.substring(0, 200),
+        MemoRef: memoRef,
+        Owner: "nxchieu",
+        Unit: "cái",
+      };
+      const res = await fetch(nocoUrl(""), { method: "POST", headers: nocoHeaders, body: JSON.stringify(payload) });
+      if (!res.ok) throw new Error(`NocoDB error ${res.status}`);
+      toast.success(`📦 Đã tạo tài sản "${assetName}"`);
+      setAssetModal(null);
+    } catch (err: unknown) {
+      toast.error(`Lỗi tạo tài sản: ${err instanceof Error ? err.message : "?"}`);
+    } finally {
+      setAssetSaving(false);
+    }
+  }, [assetModal, assetName, assetCategory, assetUnitPrice, assetPrice, assetQty, assetStatus, assetNotes]);
+
 
   if (isLoading) {
     return (
@@ -431,7 +624,84 @@ const CashflowTracker = () => {
   }
 
   return (
-    <div className="w-full min-h-screen bg-background text-foreground px-4 py-6 max-w-4xl mx-auto">
+    <div className="w-full min-h-screen bg-background text-foreground px-4 py-6 max-w-7xl mx-auto">
+
+      {/* ========================= ASSET CREATION MODAL ========================= */}
+      {assetModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setAssetModal(null)}>
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-5 overflow-hidden animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold flex items-center gap-2">
+                <PackageIcon className="w-5 h-5 text-emerald-500" /> Tạo tài sản từ thu chi
+              </h3>
+              <button onClick={() => setAssetModal(null)} className="p-1 rounded-lg hover:bg-muted text-muted-foreground">
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="text-xs bg-muted/50 border border-border rounded-lg p-2 mb-4 text-muted-foreground line-clamp-2">
+              📝 {assetModal.preview}
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Tên thiết bị / tài sản</label>
+                <input value={assetName} onChange={e => setAssetName(e.target.value)} placeholder="VD: ESP32-C3 DevKit"
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" autoFocus />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Danh mục</label>
+                  <select value={assetCategory} onChange={e => setAssetCategory(e.target.value)} className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500">
+                    {ASSET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Trạng thái</label>
+                  <select value={assetStatus} onChange={e => setAssetStatus(e.target.value)} className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500">
+                    {Object.entries(ASSET_STATUSES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Đơn giá</label>
+                  <input type="number" value={assetUnitPrice} onChange={e => setAssetUnitPrice(e.target.value)} placeholder="0"
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Tổng tiền</label>
+                  <input type="number" value={assetPrice} onChange={e => setAssetPrice(e.target.value)} placeholder="0"
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Số lượng</label>
+                  <input type="number" min="1" value={assetQty} onChange={e => setAssetQty(e.target.value)}
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Ghi chú</label>
+                <textarea value={assetNotes} onChange={e => setAssetNotes(e.target.value)} rows={2} placeholder="Ghi chú thêm..."
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-5 border-t border-border pt-4">
+              <button onClick={() => setAssetModal(null)} className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted font-medium transition-colors">Hủy</button>
+              <button onClick={submitAssetFromCashflow} disabled={assetSaving || !assetName.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium transition-colors shadow-md disabled:opacity-50">
+                {assetSaving ? <LoaderIcon className="w-4 h-4 animate-spin" /> : <PackageIcon className="w-4 h-4" />}
+                Tạo tài sản
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6 flex justify-between items-center">
         <div>
@@ -634,16 +904,28 @@ const CashflowTracker = () => {
                       <span className="text-[10px] text-muted-foreground">{entry.date}</span>
                     </div>
                   </div>
-                  <p className="text-sm text-foreground leading-relaxed line-clamp-1">{entry.preview}</p>
+                  <p className="text-sm text-foreground leading-relaxed line-clamp-1 flex items-center gap-1">
+                    {entry.preview}
+                    <ExternalLinkIcon className="w-3 h-3 text-muted-foreground/50" />
+                  </p>
                   {/* Action buttons — visible on hover */}
-                  <div className="flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-2 mt-2 opacity-60 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={(e) => { e.stopPropagation(); goToMemo(entry.memoName); }}
-                      className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-600 transition-colors"
+                      className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-600 transition-colors bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10"
                       title="Xem ghi chú gốc"
                     >
                       <ExternalLinkIcon className="w-3 h-3" /> Xem gốc
                     </button>
+                    {entry.type === "expense" && entry.amount > 0 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openAssetModal(entry); }}
+                        className="flex items-center gap-1 text-[10px] text-emerald-500 hover:text-emerald-600 transition-colors bg-emerald-500/5 px-2 py-0.5 rounded border border-emerald-500/10"
+                        title="Tạo tài sản từ giao dịch này"
+                      >
+                        <PackageIcon className="w-3 h-3" /> Tạo tài sản
+                      </button>
+                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); goToMemo(entry.memoName); }}
                       className="flex items-center gap-1 text-[10px] text-amber-500 hover:text-amber-600 transition-colors"

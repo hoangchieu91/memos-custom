@@ -1,8 +1,8 @@
 import {
-  ScrollTextIcon, PlusIcon, PrinterIcon, TrashIcon, ChevronDownIcon,
+  ScrollTextIcon, PlusIcon, PrinterIcon, ChevronDownIcon,
   FileDownIcon, XIcon,
 } from "lucide-react";
-import { useState, useMemo, useRef } from "react";
+import { useState, useRef } from "react";
 
 // ── Template Definitions ──────────────────────────────────────────────────────
 type DocType = "handover" | "acceptance" | "violation" | "meeting" | "other";

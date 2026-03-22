@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import dayjs from "dayjs";
+import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Memo } from "@/types/proto/api/v1/memo_service_pb";
 
@@ -31,7 +32,7 @@ export const ContributionHeatmap = ({ memos, weeks = 20 }: ContributionHeatmapPr
     // Count memos per day
     const dayCounts: Record<string, number> = {};
     for (const memo of memos) {
-      const day = dayjs(memo.createTime?.toDate?.() ?? memo.createTime).format("YYYY-MM-DD");
+      const day = dayjs(memo.createTime ? timestampDate(memo.createTime) : new Date()).format("YYYY-MM-DD");
       dayCounts[day] = (dayCounts[day] || 0) + 1;
     }
 

@@ -14,9 +14,8 @@ interface QdrantHit {
 
 // Candidate Ollama servers (tried in order)
 const OLLAMA_CANDIDATES = [
+  "http://10.25.7.111:11434",  // Local Windows machine — RTX 3050 GPU
   "http://localhost:11434",
-  "http://10.25.7.111:11434",
-  "http://10.25.7.212:11434",
 ];
 const QDRANT_CANDIDATES = [
   "http://localhost:6333",
@@ -24,7 +23,7 @@ const QDRANT_CANDIDATES = [
 ];
 
 const EMBED_MODEL = "nomic-embed-text";
-const CHAT_MODEL = "qwen2.5:1.5b";
+const CHAT_MODEL = "qwen2.5:7b";
 const COLLECTION = "memos";
 
 async function pingOllama(base: string): Promise<boolean> {
@@ -77,8 +76,19 @@ async function searchQdrant(qdrantUrl: string, vector: number[], topK = 5): Prom
   } catch { return []; }
 }
 
-export const AiChatPanel = () => {
-  const [isOpen, setIsOpen] = useState(false);
+export const AiChatPanel = ({
+  externalOpen,
+  onExternalClose,
+}: {
+  externalOpen?: boolean;
+  onExternalClose?: () => void;
+} = {}) => {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isExternallyControlled = externalOpen !== undefined;
+  const isOpen = isExternallyControlled ? externalOpen : internalOpen;
+  const setIsOpen = isExternallyControlled
+    ? (v: boolean) => { if (!v && onExternalClose) onExternalClose(); }
+    : setInternalOpen;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -201,13 +211,15 @@ export const AiChatPanel = () => {
     : <WifiOffIcon className="w-3 h-3 text-red-400" />;
 
   if (!isOpen) {
+    // When externally controlled, don't render standalone FAB
+    if (isExternallyControlled) return null;
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg hover:shadow-xl hover:scale-110 transition-all flex items-center justify-center"
+        className="fixed bottom-24 right-4 z-50 w-10 h-10 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-md opacity-30 hover:opacity-100 hover:w-14 hover:h-14 hover:shadow-xl transition-all duration-200 flex items-center justify-center"
         title="Hỏi AI (Bộ nhớ dài hạn)"
       >
-        <BrainCircuitIcon className="w-7 h-7" />
+        <BrainCircuitIcon className="w-5 h-5" />
       </button>
     );
   }

@@ -41,7 +41,7 @@ const MemoCardSkeleton = ({ showCreator, index }: { showCreator?: boolean; index
  * Only use for memo lists in PagedMemoList component.
  */
 const Skeleton = ({ showCreator = false, count = 4 }: SkeletonProps) => (
-  <div className="w-full max-w-2xl mx-auto">
+  <div className="w-full mx-auto">
     {Array.from({ length: count }, (_, i) => (
       <MemoCardSkeleton key={i} showCreator={showCreator} index={i} />
     ))}

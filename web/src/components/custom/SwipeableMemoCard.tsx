@@ -68,7 +68,7 @@ export const SwipeableMemoCard = ({ children, memo, onEdit, onDelete, onPin, onA
   );
 
   const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
+    (_e: React.TouchEvent) => {
       longPressHandlers.onTouchEnd();
       if (!isDragging.current) return;
 

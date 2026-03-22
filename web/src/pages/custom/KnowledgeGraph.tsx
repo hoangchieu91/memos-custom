@@ -48,7 +48,7 @@ const KnowledgeGraph = () => {
     const tagIndex = Object.fromEntries(sortedTags.map(([tag], i) => [tag, i]));
     const categories = [
       ...sortedTags.map(([tag], i) => ({ name: `#${tag}`, itemStyle: { color: COLORS[i % COLORS.length] } })),
-      { name: "Memo", itemStyle: { color: "#64748b" } },
+      { name: "Memo", itemStyle: { color: "oklch(0.55 0.02 230)" } },
     ];
 
     const nodes: any[] = [];
@@ -82,7 +82,7 @@ const KnowledgeGraph = () => {
           symbolSize: 6,
           category: catIdx,
           label: { show: false },
-          itemStyle: { color: primaryTag ? COLORS[tagIndex[primaryTag] % COLORS.length] : "#64748b", opacity: 0.6 },
+          itemStyle: { color: primaryTag ? COLORS[tagIndex[primaryTag] % COLORS.length] : "oklch(0.55 0.02 230)", opacity: 0.6 },
         });
         // Link memo to its tags
         tags.forEach((tag) => {
@@ -132,9 +132,9 @@ const KnowledgeGraph = () => {
       orient: "vertical",
       right: 8,
       top: 8,
-      textStyle: { color: "#aaa", fontSize: 10 },
+      textStyle: { color: "oklch(0.72 0.01 240)", fontSize: 10 },
       type: "scroll",
-      pageTextStyle: { color: "#aaa" },
+      pageTextStyle: { color: "oklch(0.72 0.01 240)" },
       icon: "circle",
       itemWidth: 10,
       itemHeight: 10,
@@ -150,7 +150,7 @@ const KnowledgeGraph = () => {
       label: {
         show: false,
         fontSize: 10,
-        color: "#ddd",
+        color: "oklch(0.88 0.005 240)",
       },
       emphasis: {
         focus: "adjacency",

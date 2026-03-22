@@ -89,8 +89,26 @@ export const useMemoActionHandlers = ({ memo, onEdit, setDeleteDialogOpen: _setD
       return;
     }
 
-    // Step 2: build plain-text toast with inline "Hoàn tác" link (no JSX)
-    const restoreMemo = async () => {
+    // Step 2: undo toast using a simple approach
+    let undone = false;
+    const toastId = toast.loading("🗑️ Đã xóa memo — đang chờ 5s để hoàn tác...", {
+      duration: 5000,
+      position: "bottom-center",
+      style: { background: "#27272a", color: "#fff", borderRadius: "12px", fontSize: "14px" },
+    });
+
+    // Auto-dismiss after 5s
+    setTimeout(() => {
+      toast.dismiss(toastId);
+      if (!undone) {
+        toast.success("Memo đã xóa", { duration: 1500 });
+      }
+    }, 5000);
+
+    // Listen for click on toast to undo
+    const handleUndoClick = async () => {
+      undone = true;
+      toast.dismiss(toastId);
       try {
         await updateMemo({
           update: { name: memo.name, state: State.NORMAL },
@@ -105,33 +123,24 @@ export const useMemoActionHandlers = ({ memo, onEdit, setDeleteDialogOpen: _setD
       } catch { /* silent */ }
     };
 
-    // Use toast with a render function — this file is .ts, render via DOM createElement
-    toast(
-      (toastInstance) => {
-        const container = document.createElement("span");
-        container.style.display = "flex";
-        container.style.alignItems = "center";
-        container.style.gap = "8px";
-        container.style.fontSize = "14px";
-
-        const msg = document.createElement("span");
-        msg.textContent = "🗑️ Đã xóa memo";
-        container.appendChild(msg);
-
-        const btn = document.createElement("button");
-        btn.textContent = "Hoàn tác";
-        btn.style.cssText =
-          "font-weight:700;color:#fbbf24;text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;font-size:13px;";
-        btn.addEventListener("click", () => {
-          toast.dismiss(toastInstance.id);
-          restoreMemo();
-        });
-        container.appendChild(btn);
-
-        return container as unknown as React.ReactElement;
-      },
-      { duration: 5000, position: "bottom-center", style: { background: "#27272a", color: "#fff", borderRadius: "12px" } },
-    );
+    // Replace loading toast with clickable undo toast
+    setTimeout(() => {
+      if (!undone) {
+        toast.dismiss(toastId);
+        toast(
+          "🗑️ Đã xóa memo. Bấm để hoàn tác",
+          {
+            duration: 5000,
+            position: "bottom-center",
+            style: { background: "#27272a", color: "#fbbf24", borderRadius: "12px", fontSize: "14px", cursor: "pointer" },
+            id: toastId + "-undo",
+          },
+        );
+        // Add click listener to the toast
+        const toastEl = document.querySelector(`[data-toast-id="${toastId}-undo"]`) as HTMLElement;
+        if (toastEl) toastEl.addEventListener("click", handleUndoClick, { once: true });
+      }
+    }, 100);
 
     if (memo.parent) {
       queryClient.invalidateQueries({ queryKey: memoKeys.comments(memo.parent) });
@@ -140,7 +149,7 @@ export const useMemoActionHandlers = ({ memo, onEdit, setDeleteDialogOpen: _setD
       navigateTo("/");
     }
     memoUpdatedCallback();
-  }, [memo.name, memo.content, memo.parent, isInMemoDetailPage, navigateTo, memoUpdatedCallback, updateMemo, queryClient]);
+  }, [memo.name, memo.parent, isInMemoDetailPage, navigateTo, memoUpdatedCallback, updateMemo, queryClient]);
 
   // ── HARD DELETE (only from Archived page) ────────────────────────────────
   const confirmDeleteMemo = useCallback(async () => {

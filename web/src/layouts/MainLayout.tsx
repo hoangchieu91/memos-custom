@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { matchPath, Outlet, useLocation } from "react-router-dom";
 import type { MemoExplorerContext } from "@/components/MemoExplorer";
-import { MemoExplorer, MemoExplorerDrawer } from "@/components/MemoExplorer";
-import MobileHeader from "@/components/MobileHeader";
+import { MemoExplorer } from "@/components/MemoExplorer";
 import { userServiceClient } from "@/connect";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useFilteredMemoStats } from "@/hooks/useFilteredMemoStats";
@@ -16,6 +15,19 @@ const MainLayout = () => {
   const location = useLocation();
   const currentUser = useCurrentUser();
   const [profileUserName, setProfileUserName] = useState<string | undefined>();
+
+  // Track sidebar collapsed state (synced with Navigation & RootLayout)
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem("nav_collapsed") !== "false"; } catch { return true; }
+  });
+
+  useEffect(() => {
+    const onStorage = () => {
+      try { setNavCollapsed(localStorage.getItem("nav_collapsed") !== "false"); } catch { /**/ }
+    };
+    const interval = setInterval(onStorage, 200);
+    return () => clearInterval(interval);
+  }, []);
 
   // Determine context based on current route
   const context: MemoExplorerContext = useMemo(() => {
@@ -32,8 +44,6 @@ const MainLayout = () => {
     if (match && context === "profile") {
       const username = match.params.username;
       if (username) {
-        // Fetch or get user to obtain user name (e.g., "users/123")
-        // Note: User stats will be fetched by useFilteredMemoStats
         userServiceClient
           .getUser({ name: `users/${username}` })
           .then((user) => {
@@ -49,10 +59,6 @@ const MainLayout = () => {
     }
   }, [location.pathname, context]);
 
-  // Determine which user name to use for per-user stats.
-  // - home: current user's stats
-  // - profile: viewed user's stats
-  // - archived/explore: no user scope (each handled differently inside the hook)
   const statsUserName = useMemo(() => {
     if (context === "home") return currentUser?.name;
     if (context === "profile") return profileUserName;
@@ -61,23 +67,31 @@ const MainLayout = () => {
 
   const { statistics, tags } = useFilteredMemoStats({ userName: statsUserName, context });
 
+  // Explorer panel width
+  const explorerW = lg ? "w-72" : "w-56";
+
   return (
-    <section className="@container w-full min-h-full flex flex-col justify-start items-center">
-      {!md && (
-        <MobileHeader>
-          <MemoExplorerDrawer context={context} statisticsData={statistics} tagCount={tags} />
-        </MobileHeader>
-      )}
+    <section className="w-full min-h-svh flex flex-row justify-center items-start overflow-x-hidden">
+      {/* 1. Mobile Top Spacer (only on non-md) */}
+      {!md && <div className="h-14 shrink-0" />}
+
+      {/* 2. PC Explorer (hidden on mobile) */}
       {md && (
-        <div className={cn("fixed top-0 left-16 shrink-0 h-svh transition-all", "border-r border-border", lg ? "w-72" : "w-56")}>
-          <MemoExplorer className={cn("px-3 py-6")} context={context} statisticsData={statistics} tagCount={tags} />
+        <div className={cn("fixed top-0 bottom-0 z-40 border-r border-border bg-sidebar transition-all duration-200 overflow-y-auto", 
+          navCollapsed ? "left-16" : "left-64", 
+          explorerW
+        )}>
+          <MemoExplorer className="px-3 py-6" context={context} statisticsData={statistics} tagCount={tags} />
         </div>
       )}
-      <div className={cn("w-full min-h-full", lg ? "pl-72" : md ? "pl-56" : "")}>
-        <div className={cn("w-full mx-auto px-4 sm:px-6 md:pt-6 pb-8")}>
+
+      {/* 3. Main Content Area */}
+      {/* We add padding-left to the main content ONLY for the Explorer width, because RootLayout already handles Sidebar padding */}
+      <main className={cn("flex-1 h-auto transition-all duration-300", md ? (lg ? "pl-72" : "pl-56") : "pt-14")}>
+        <div className="w-full max-w-full mx-auto px-4 sm:px-6 lg:px-12 xl:px-24 md:py-8 transition-all duration-300">
           <Outlet />
         </div>
-      </div>
+      </main>
     </section>
   );
 };

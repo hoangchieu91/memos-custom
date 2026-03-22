@@ -19,8 +19,22 @@ const QUOTES = [
   { text: "Viết là cách suy nghĩ rõ ràng nhất.", author: "Paul Graham" },
 ];
 
-export const FocusZenMode = () => {
-  const [isActive, setIsActive] = useState(false);
+export const FocusZenMode = ({
+  externalOpen,
+  onExternalClose,
+}: {
+  externalOpen?: boolean;
+  onExternalClose?: () => void;
+} = {}) => {
+  const [internalActive, setInternalActive] = useState(false);
+  const isExternallyControlled = externalOpen !== undefined;
+  const isActive = isExternallyControlled ? externalOpen : internalActive;
+  const setIsActive = isExternallyControlled
+    ? (v: boolean) => {
+        if (v) setInternalActive(true);
+        else { setInternalActive(false); if (onExternalClose) onExternalClose(); }
+      }
+    : setInternalActive;
   const [content, setContent] = useState("");
   const [gradientIndex, setGradientIndex] = useState(0);
   const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]);
@@ -61,14 +75,24 @@ export const FocusZenMode = () => {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isActive]);
+  }, [isActive, setIsActive]);
+
+  // External open trigger
+  useEffect(() => {
+    if (isExternallyControlled && externalOpen && !internalActive) {
+      setInternalActive(true);
+      setStartTime(Date.now());
+      setContent("");
+      setElapsed(0);
+    }
+  }, [externalOpen, isExternallyControlled, internalActive]);
 
   const handleActivate = useCallback(() => {
     setIsActive(true);
     setStartTime(Date.now());
     setContent("");
     setElapsed(0);
-  }, []);
+  }, [setIsActive]);
 
   const handleSave = useCallback(async () => {
     if (!content.trim()) {
@@ -82,7 +106,7 @@ export const FocusZenMode = () => {
     } catch {
       toast.error("Lỗi lưu ghi chú");
     }
-  }, [content, createMemo]);
+  }, [content, createMemo, setIsActive]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -91,13 +115,15 @@ export const FocusZenMode = () => {
   };
 
   if (!isActive) {
+    // When externally controlled, don't render standalone FAB
+    if (isExternallyControlled) return null;
     return (
       <button
         onClick={handleActivate}
-        className="fixed bottom-6 left-6 z-40 w-12 h-12 rounded-full bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-lg hover:shadow-xl hover:scale-110 transition-all flex items-center justify-center"
+        className="fixed bottom-24 left-4 z-40 w-10 h-10 rounded-full bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-md opacity-30 hover:opacity-100 hover:w-12 hover:h-12 hover:shadow-xl transition-all duration-200 flex items-center justify-center"
         title="Focus / Zen Mode 🧘"
       >
-        <FocusIcon className="w-6 h-6" />
+        <FocusIcon className="w-5 h-5" />
       </button>
     );
   }

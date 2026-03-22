@@ -32,10 +32,14 @@ export interface UseMemoFiltersOptions {
   includeShortcuts?: boolean;
   includePinned?: boolean;
   visibilities?: Visibility[];
+  /** Only show memos that have ALL of these tags */
+  includeTags?: string[];
+  /** Hide memos that have ANY of these tags */
+  excludeTags?: string[];
 }
 
 export const useMemoFilters = (options: UseMemoFiltersOptions = {}): string | undefined => {
-  const { creatorName, includeShortcuts = false, includePinned = false, visibilities } = options;
+  const { creatorName, includeShortcuts = false, includePinned = false, visibilities, includeTags, excludeTags } = options;
 
   const { shortcuts } = useAuth();
   const { filters, shortcut: currentShortcut } = useMemoFilterContext();
@@ -89,6 +93,20 @@ export const useMemoFilters = (options: UseMemoFiltersOptions = {}): string | un
       }
     }
 
+    // Add tag include filter (show only memos with these tags)
+    if (includeTags && includeTags.length > 0) {
+      for (const tag of includeTags) {
+        conditions.push(`tag in ["${tag}"]`);
+      }
+    }
+
+    // Add tag exclude filter (hide memos with these tags)
+    if (excludeTags && excludeTags.length > 0) {
+      for (const tag of excludeTags) {
+        conditions.push(`!(tag in ["${tag}"])`);
+      }
+    }
+
     // Add visibility filter if specified
     if (visibilities && visibilities.length > 0) {
       const visibilityValues = visibilities.map((v) => `"${getVisibilityName(v)}"`).join(", ");
@@ -96,5 +114,5 @@ export const useMemoFilters = (options: UseMemoFiltersOptions = {}): string | un
     }
 
     return conditions.length > 0 ? conditions.join(" && ") : undefined;
-  }, [creatorName, includeShortcuts, includePinned, visibilities, selectedShortcut, filters, memoRelatedSetting]);
+  }, [creatorName, includeShortcuts, includePinned, visibilities, includeTags, excludeTags, selectedShortcut, filters, memoRelatedSetting]);
 };
