@@ -129,18 +129,18 @@ const KanbanCard = ({
       draggable
       onDragStart={(e) => onDragStart(e, memo.name)}
       onClick={() => navigate(`/${memo.name}`)}
-      className={`group relative bg-card rounded-lg border border-border hover:border-border/80 hover:shadow-md cursor-pointer transition-all duration-150 overflow-hidden ${
-        density === "standard" ? "py-2.5" : "py-2"
+      className={`group relative bg-card rounded-lg border border-border hover:border-border/80 hover:shadow-md cursor-pointer transition-all duration-150 overflow-hidden flex flex-col ${
+        density === "standard" ? "py-2.5 min-h-[100px]" : "py-2 min-h-[64px]"
       }`}
     >
       <div className={`absolute left-0 top-0 w-0.5 h-full ${accentClass}`} />
 
-      <div className="pl-3 pr-2.5">
-        <div className="flex items-start gap-1.5 font-sans">
+      <div className="pl-3 pr-2.5 flex-1 flex flex-col">
+        <div className="flex items-start gap-1.5 font-sans mb-1">
           {priority === "high" && (
             <span className="mt-0.5 shrink-0 text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-red-500/15 text-red-500 animate-pulse">HOT</span>
           )}
-          <p className={`text-xs font-semibold leading-snug text-foreground flex-1 ${density === "compact" ? "line-clamp-2" : "line-clamp-1"}`}>
+          <p className={`text-xs font-semibold leading-snug text-foreground flex-1 ${density === "compact" ? "line-clamp-2" : "line-clamp-2"}`}>
             {title}
           </p>
 
@@ -156,12 +156,12 @@ const KanbanCard = ({
         </div>
 
         {density === "standard" && previewContent && (
-          <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed line-clamp-3 font-sans opacity-80">
+          <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-4 font-sans opacity-80 flex-1">
             {previewContent}
           </p>
         )}
 
-        <div className="flex items-center justify-between mt-2 gap-1 flex-wrap">
+        <div className="mt-auto pt-2 flex items-center justify-between gap-1 flex-wrap border-t border-border/10">
           <div className="flex gap-1 flex-wrap">
             {visibleTags.map((tag) => (
               <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
@@ -170,7 +170,7 @@ const KanbanCard = ({
             ))}
           </div>
           {displayTime && (
-            <span className="text-[9px] text-muted-foreground/50 shrink-0 font-mono">{displayTime}</span>
+            <span className="text-[9px] text-muted-foreground/50 shrink-0 font-mono italic">{displayTime}</span>
           )}
         </div>
       </div>
@@ -281,11 +281,12 @@ const KanbanColumn = ({
       {/* Cards container with custom scrollbar */}
       {!(isMobile && isCollapsed) && (
         <div className={`flex flex-col gap-2.5 p-2.5 overflow-y-auto flex-1 min-h-[100px] 
-          [&::-webkit-scrollbar]:w-1.5 
+          [&::-webkit-scrollbar]:w-2
           [&::-webkit-scrollbar-track]:bg-transparent 
-          [&::-webkit-scrollbar-thumb]:bg-muted-foreground/10 
+          [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 
           [&::-webkit-scrollbar-thumb]:rounded-full 
-          hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 
+          hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/40 
+          active:[&::-webkit-scrollbar-thumb]:bg-primary/40
           transition-all duration-300
           ${isMobile ? "max-h-[60vh]" : "max-h-[calc(100vh-220px)]"}`}
         >
