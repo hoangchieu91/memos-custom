@@ -13,10 +13,14 @@
  * ✅ Improved empty states
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { SearchIcon, XIcon, PlusIcon, ChevronDownIcon, ArrowRightIcon } from "lucide-react";
+import { 
+  SearchIcon, XIcon, PlusIcon, ChevronDownIcon, ArrowRightIcon, 
+  Settings2Icon, LayoutDashboardIcon, EyeIcon, EyeOffIcon,
+  Maximize2Icon, Minimize2Icon
+} from "lucide-react";
 import MobileHeader from "@/components/MobileHeader";
 import { useMemos, useUpdateMemo, useCreateMemo } from "@/hooks/useMemoQueries";
 import { Memo } from "@/types/proto/api/v1/memo_service_pb";
@@ -55,9 +59,16 @@ const ALL_COL_TAGS = COLUMNS.map((c) => c.tag);
 
 function getMemoColumn(memo: Memo): ColumnTag | null {
   const tags = memo.tags || [];
-  if (tags.some((t) => t === "task" || t.startsWith("task/"))) return "todo";
+  // Hierarchical task support: check endsWith(/task) or startsWith(task/) or equals(task)
+  // Check todo specifically first as it has 'task' alias
+  const isTodo = tags.some((t) =>
+    t === "todo" || t === "task" || t.endsWith("/todo") || t.endsWith("/task") || t.startsWith("task/")
+  );
+  if (isTodo) return "todo";
+
   for (const col of COLUMNS) {
-    if (tags.includes(col.tag)) return col.tag;
+    if (col.tag === "todo") continue;
+    if (tags.some((t) => t === col.tag || t.endsWith("/" + col.tag))) return col.tag;
   }
   return null;
 }
@@ -83,17 +94,26 @@ const KanbanCard = ({
   onDragStart,
   nextColumn,
   onMoveNext,
+  density = "compact",
 }: {
   memo: Memo;
   accentClass: string;
   onDragStart: (e: React.DragEvent, name: string) => void;
   nextColumn?: ColumnConfig;
   onMoveNext?: (memoName: string, targetTag: ColumnTag) => void;
+  density?: "compact" | "standard";
 }) => {
   const navigate = useNavigate();
   const priority = getPriority(memo.content);
   const title = getTitle(memo.content);
   const visibleTags = (memo.tags || []).filter((t) => !(ALL_COL_TAGS as string[]).includes(t) && t !== "task").slice(0, 3);
+  
+  // Extract a preview for standard density
+  const previewContent = useMemo(() => {
+    if (density === "compact") return "";
+    return memo.content.split("\n").filter(l => !l.startsWith("#") && l.trim()).slice(0, 3).join(" ");
+  }, [memo.content, density]);
+
   const displayTime = (() => {
     try {
       if (!memo.displayTime) return "";
@@ -107,18 +127,21 @@ const KanbanCard = ({
       draggable
       onDragStart={(e) => onDragStart(e, memo.name)}
       onClick={() => navigate(`/${memo.name}`)}
-      className="group relative bg-card rounded-lg border border-border hover:border-border/80 hover:shadow-sm cursor-pointer transition-all duration-150 overflow-hidden"
+      className={`group relative bg-card rounded-lg border border-border hover:border-border/80 hover:shadow-md cursor-pointer transition-all duration-150 overflow-hidden ${
+        density === "standard" ? "py-2.5" : "py-2"
+      }`}
     >
       <div className={`absolute left-0 top-0 w-0.5 h-full ${accentClass}`} />
 
-      <div className="pl-3 pr-2.5 py-2">
-        <div className="flex items-start gap-1.5">
+      <div className="pl-3 pr-2.5">
+        <div className="flex items-start gap-1.5 font-sans">
           {priority === "high" && (
-            <span className="mt-0.5 shrink-0 text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-red-500/15 text-red-500">HOT</span>
+            <span className="mt-0.5 shrink-0 text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-red-500/15 text-red-500 animate-pulse">HOT</span>
           )}
-          <p className="text-xs font-medium leading-snug line-clamp-2 text-foreground flex-1">{title}</p>
+          <p className={`text-xs font-semibold leading-snug text-foreground flex-1 ${density === "compact" ? "line-clamp-2" : "line-clamp-1"}`}>
+            {title}
+          </p>
 
-          {/* Quick move to next column button */}
           {nextColumn && onMoveNext && (
             <button
               onClick={(e) => { e.stopPropagation(); onMoveNext(memo.name, nextColumn.tag); }}
@@ -130,16 +153,22 @@ const KanbanCard = ({
           )}
         </div>
 
-        <div className="flex items-center justify-between mt-1.5 gap-1 flex-wrap">
+        {density === "standard" && previewContent && (
+          <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed line-clamp-3 font-sans opacity-80">
+            {previewContent}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between mt-2 gap-1 flex-wrap">
           <div className="flex gap-1 flex-wrap">
             {visibleTags.map((tag) => (
-              <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border/50">
+              <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
                 #{tag}
               </span>
             ))}
           </div>
           {displayTime && (
-            <span className="text-[9px] text-muted-foreground/60 shrink-0">{displayTime}</span>
+            <span className="text-[9px] text-muted-foreground/50 shrink-0 font-mono">{displayTime}</span>
           )}
         </div>
       </div>
@@ -156,6 +185,7 @@ const KanbanColumn = ({
   nextColumn,
   onMoveNext,
   isMobile,
+  density,
 }: {
   config: ColumnConfig;
   items: Memo[];
@@ -164,6 +194,7 @@ const KanbanColumn = ({
   nextColumn?: ColumnConfig;
   onMoveNext: (memoName: string, targetTag: ColumnTag) => void;
   isMobile: boolean;
+  density: "compact" | "standard";
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -187,67 +218,75 @@ const KanbanColumn = ({
 
   return (
     <div
-      className={`flex flex-col rounded-xl border border-border/50 transition-all ${config.bgClass} ${isDragOver ? "ring-2 ring-violet-500/40 scale-[1.005]" : ""} ${
-        isMobile ? "w-full" : "min-w-[240px] flex-1"
+      className={`flex flex-col rounded-xl border border-border/50 transition-all ${config.bgClass} ${isDragOver ? "ring-2 ring-primary/40 scale-[1.005]" : ""} ${
+        isMobile ? "w-full" : "min-w-[280px] sm:min-w-[300px] flex-1 max-w-[400px]"
       }`}
       onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
       onDragLeave={() => setIsDragOver(false)}
       onDrop={(e) => { setIsDragOver(false); onDrop(e, config.tag); }}
     >
-      {/* Column header */}
-      <div className="flex items-center justify-between px-3 pt-3 pb-2 border-b border-border/30">
+      {/* Column header - STICKY */}
+      <div className="sticky top-0 z-10 flex items-center justify-between px-3.5 py-2.5 bg-card/60 backdrop-blur-md border-b border-border/30 rounded-t-xl">
         <button
           onClick={() => isMobile && setIsCollapsed((v) => !v)}
-          className={`flex items-center gap-1.5 ${isMobile ? "cursor-pointer" : "cursor-default"}`}
+          className={`flex items-center gap-2 ${isMobile ? "cursor-pointer" : "cursor-default"}`}
         >
-          <div className={`w-2 h-2 rounded-full ${config.colorClass}`} />
-          <span className="text-xs font-semibold text-foreground/80">{config.icon} {config.title}</span>
+          <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${config.colorClass}`} />
+          <span className="text-[13px] font-bold text-foreground/90 tracking-tight">{config.icon} {config.title}</span>
           {isMobile && (
-            <ChevronDownIcon className={`w-3 h-3 text-muted-foreground transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+            <ChevronDownIcon className={`w-4 h-4 text-muted-foreground transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
           )}
         </button>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-background border text-muted-foreground">{items.length}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border/50">{items.length}</span>
           <button
             onClick={() => setShowAddForm((v) => !v)}
-            className="p-0.5 rounded hover:bg-accent text-muted-foreground/60 hover:text-foreground transition-colors"
+            className="p-1 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground transition-all"
             title="Thêm thẻ mới"
           >
-            <PlusIcon className="w-3.5 h-3.5" />
+            <PlusIcon className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {/* Quick-add form */}
       {showAddForm && (
-        <div className="px-2 pt-2 animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="px-2.5 pt-2.5 animate-in fade-in slide-in-from-top-2 duration-150">
           <textarea
             autoFocus
             value={newCardText}
             onChange={(e) => setNewCardText(e.target.value)}
             placeholder="Nội dung thẻ mới..."
-            className="w-full bg-card border border-border rounded-lg p-2 text-xs resize-none min-h-[48px] focus:outline-none focus:ring-1 focus:ring-ring"
+            className="w-full bg-card border border-border rounded-lg p-2.5 text-xs resize-none min-h-[64px] focus:outline-none focus:ring-1 focus:ring-ring transition-shadow shadow-xs"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAddCard(); }
               if (e.key === "Escape") setShowAddForm(false);
             }}
           />
-          <div className="flex justify-end gap-1 mt-1 mb-1">
-            <button onClick={() => setShowAddForm(false)} className="px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground">Hủy</button>
+          <div className="flex justify-end gap-1.5 mt-1.5 mb-1.5">
+            <button onClick={() => setShowAddForm(false)} className="px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground">Hủy</button>
             <button
               onClick={handleAddCard}
               disabled={!newCardText.trim()}
-              className={`px-2 py-1 text-[10px] ${config.colorClass} text-white rounded-md disabled:opacity-40`}
+              className={`px-3 py-1 text-[11px] font-bold ${config.colorClass} text-white rounded-md shadow-sm disabled:opacity-40 transition-opacity`}
             >
-              Tạo
+              Tạo thẻ
             </button>
           </div>
         </div>
       )}
 
-      {/* Cards */}
+      {/* Cards container with custom scrollbar */}
       {!(isMobile && isCollapsed) && (
-        <div className={`flex flex-col gap-2 p-2 overflow-y-auto flex-1 min-h-[60px] ${isMobile ? "max-h-[50vh]" : "max-h-[calc(100vh-240px)]"}`}>
+        <div className={`flex flex-col gap-2.5 p-2.5 overflow-y-auto flex-1 min-h-[100px] 
+          [&::-webkit-scrollbar]:w-1.5 
+          [&::-webkit-scrollbar-track]:bg-transparent 
+          [&::-webkit-scrollbar-thumb]:bg-muted-foreground/10 
+          [&::-webkit-scrollbar-thumb]:rounded-full 
+          hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 
+          transition-all duration-300
+          ${isMobile ? "max-h-[60vh]" : "max-h-[calc(100vh-220px)]"}`}
+        >
           {items.map((memo) => (
             <KanbanCard
               key={memo.name}
@@ -256,12 +295,13 @@ const KanbanColumn = ({
               onDragStart={onDragStart}
               nextColumn={nextColumn}
               onMoveNext={onMoveNext}
+              density={density}
             />
           ))}
           {items.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-4 text-muted-foreground/40 text-[10px] gap-1 border-2 border-dashed rounded-lg border-border/30">
-              <span className="text-base">📥</span>
-              Kéo thả vào đây
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/30 text-[11px] gap-2 border-2 border-dashed rounded-xl border-border/20">
+              <span className="text-2xl opacity-50 grayscale">📥</span>
+              <p className="font-medium">Chưa có nhiệm vụ nào</p>
             </div>
           )}
         </div>
@@ -272,10 +312,34 @@ const KanbanColumn = ({
 
 // ── Main Board ─────────────────────────────────────────────────────────────────
 const Board = () => {
-  const { data, isLoading } = useMemos({ pageSize: 1000 });
+  const { data, isLoading } = useMemos({ pageSize: 2000 }); // Increased for Pro view
   const updateMemo = useUpdateMemo();
   const [search, setSearch] = useState("");
   const isMobile = !useMediaQuery("sm");
+  
+  // Settings & Density states
+  const [density, setDensity] = useState<"compact" | "standard">(() => {
+    return (localStorage.getItem("kanban_density") as any) || "compact";
+  });
+  const [visibleColumns, setVisibleColumns] = useState<ColumnTag[]>(() => {
+    const saved = localStorage.getItem("kanban_columns");
+    return saved ? JSON.parse(saved) : ALL_COL_TAGS;
+  });
+  const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("kanban_density", density);
+  }, [density]);
+
+  useEffect(() => {
+    localStorage.setItem("kanban_columns", JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+
+  const toggleColumn = (tag: ColumnTag) => {
+    setVisibleColumns(prev => 
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
 
   const memos = data?.memos || [];
 
@@ -311,15 +375,19 @@ const Board = () => {
     if (getMemoColumn(memo) === targetTag) return;
 
     let newContent = memo.content;
-    const taskAliasRe = /#(task(?:\/\S+)?)\b/g;
-    newContent = newContent.replace(taskAliasRe, `#${targetTag}`);
 
-    const otherColTags = ALL_COL_TAGS.filter((t) => t !== targetTag && (memo.tags || []).includes(t));
-    for (const old of otherColTags) {
-      newContent = newContent.replace(new RegExp(`(#)${old}\\b`, "g"), `#${targetTag}`);
-    }
+    // 1. Replace hierarchical tags
+    const hierarchicalTagRe = /#(\S+?)\/(todo|doing|review|payment|warranty|done|task)\b/g;
+    newContent = newContent.replace(hierarchicalTagRe, (_, prefix) => `#${prefix}/${targetTag}`);
 
-    if (newContent === memo.content) {
+    // 2. Replace simple tags
+    const simpleTagRe = new RegExp(`#(todo|doing|review|payment|warranty|done|task)\\b`, "g");
+    newContent = newContent.replace(simpleTagRe, `#${targetTag}`);
+
+    const currentTags = (newContent.match(/#\S+/g) || []).map((t) => t.slice(1));
+    const hasTarget = currentTags.some((t) => t === targetTag || t.endsWith("/" + targetTag));
+
+    if (!hasTarget) {
       newContent += `\n#${targetTag}`;
     }
 
@@ -343,44 +411,98 @@ const Board = () => {
   };
 
   return (
-    <section className="@container w-full min-h-screen flex flex-col bg-background">
+    <section className="@container w-full min-h-screen flex flex-col bg-background/50">
       <MobileHeader />
 
-      {/* Top bar */}
-      <div className="px-4 sm:px-5 pt-4 pb-3 flex items-center gap-3 flex-wrap">
-        <div className="flex-1 min-w-0">
-          <h1 className="text-base font-bold tracking-tight">🗂️ Bảng Kanban</h1>
-          <p className="text-[11px] text-muted-foreground mt-0.5 hidden sm:block">
-            Tag <code className="text-[10px]">#todo #doing #review #payment #warranty #done</code> — <code className="text-[10px]">#task</code> = <code className="text-[10px]">#todo</code>
-          </p>
-        </div>
+      {/* Enhanced Top bar */}
+      <div className="px-4 sm:px-6 pt-5 pb-4 border-b border-border/40 bg-card/30 backdrop-blur-xl sticky top-0 z-20">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-xl">
+              <LayoutDashboardIcon className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-lg font-black tracking-tight text-foreground">Kanban Pro</h1>
+              <p className="text-[10px] uppercase font-bold text-muted-foreground/60 tracking-widest hidden sm:block">
+                Workspace / Tasks Management
+              </p>
+            </div>
+          </div>
 
-        {/* Search */}
-        <div className="relative">
-          <SearchIcon className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm kiếm..."
-            className="h-8 pl-8 pr-8 rounded-lg border border-border bg-card text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring w-36 sm:w-44"
-          />
-          {search && (
-            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              <XIcon className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-2">
+            {/* Search */}
+            <div className="relative">
+              <SearchIcon className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/50" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Tìm kế hoạch..."
+                className="h-9 pl-9 pr-8 rounded-xl border border-border/60 bg-background/50 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 w-40 sm:w-64 transition-all"
+              />
+              {search && (
+                <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <XIcon className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Density toggle */}
+            <button
+              onClick={() => setDensity(d => d === "compact" ? "standard" : "compact")}
+              className="p-2 rounded-xl border border-border/60 bg-background/50 hover:bg-accent text-muted-foreground transition-all"
+              title={density === "compact" ? "Chuyển sang xem Chi tiết" : "Chuyển sang xem Thu gọn"}
+            >
+              {density === "compact" ? <Maximize2Icon className="w-4 h-4" /> : <Minimize2Icon className="w-4 h-4" />}
             </button>
-          )}
-        </div>
 
-        <span className="text-[10px] text-muted-foreground">{boardMemos.length} thẻ</span>
+            {/* Settings toggle */}
+            <div className="relative">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className={`p-2 rounded-xl border border-border/60 bg-background/50 hover:bg-accent transition-all ${showSettings ? "ring-2 ring-primary/20 text-primary" : "text-muted-foreground"}`}
+                title="Cấu hình hiển thị"
+              >
+                <Settings2Icon className="w-4 h-4" />
+              </button>
+              
+              {showSettings && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowSettings(false)} />
+                  <div className="absolute right-0 mt-2 w-56 bg-card border border-border rounded-2xl shadow-2xl p-3 z-40 animate-in fade-in zoom-in-95 duration-200">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground mb-3 px-1 tracking-wider">Hiển thị cột</p>
+                    <div className="flex flex-col gap-1">
+                      {COLUMNS.map(col => (
+                        <button
+                          key={col.tag}
+                          onClick={() => toggleColumn(col.tag)}
+                          className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-accent transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">{col.icon}</span>
+                            <span className="text-xs font-semibold">{col.title}</span>
+                          </div>
+                          {visibleColumns.includes(col.tag) ? <EyeIcon className="w-3.5 h-3.5 text-primary" /> : <EyeOffIcon className="w-3.5 h-3.5 text-muted-foreground/30" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Columns */}
-      <div className={`flex-1 overflow-x-auto overflow-y-auto px-4 sm:px-5 pb-4 ${isMobile ? "" : ""}`}>
+      {/* Columns Container */}
+      <div className="flex-1 overflow-x-auto px-4 sm:px-6 py-6 custom-scrollbar">
         {isLoading ? (
-          <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Đang tải...</div>
+          <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground animate-pulse">
+            <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+            <span className="text-xs font-bold uppercase tracking-widest">Đang tải dữ liệu...</span>
+          </div>
         ) : (
-          <div className={`${isMobile ? "flex flex-col gap-3" : "flex gap-3 h-full items-start"}`}>
-            {COLUMNS.map((col, i) => (
+          <div className={`${isMobile ? "flex flex-col gap-6" : "flex gap-5 h-full items-start"}`}>
+            {COLUMNS.filter(col => visibleColumns.includes(col.tag)).map((col, i) => (
               <KanbanColumn
                 key={col.tag}
                 config={col}
@@ -390,8 +512,19 @@ const Board = () => {
                 nextColumn={i < COLUMNS.length - 1 ? COLUMNS[i + 1] : undefined}
                 onMoveNext={moveMemo}
                 isMobile={isMobile}
+                density={density}
               />
             ))}
+            
+            {visibleColumns.length < COLUMNS.length && (
+              <button 
+                onClick={() => setShowSettings(true)}
+                className="flex flex-col items-center justify-center min-w-[100px] h-full rounded-2xl border-2 border-dashed border-border/20 hover:border-primary/20 hover:bg-primary/5 text-muted-foreground/40 hover:text-primary transition-all group py-10"
+              >
+                <PlusIcon className="w-6 h-6 mb-2 group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-black uppercase tracking-tighter">Hiện thêm cột</span>
+              </button>
+            )}
           </div>
         )}
       </div>
