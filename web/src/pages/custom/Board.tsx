@@ -61,8 +61,10 @@ function getMemoColumn(memo: Memo): ColumnTag | null {
   const tags = memo.tags || [];
   // Hierarchical task support: check endsWith(/task) or startsWith(task/) or equals(task)
   // Check todo specifically first as it has 'task' alias
+  // EXCLUDE: tags starting with 'ai/' to avoid cluttering the board with AI logs
   const isTodo = tags.some((t) =>
-    t === "todo" || t === "task" || t.endsWith("/todo") || t.endsWith("/task") || t.startsWith("task/")
+    (t === "todo" || t === "task" || t.endsWith("/todo") || t.endsWith("/task") || t.startsWith("task/")) &&
+    !t.startsWith("ai/")
   );
   if (isTodo) return "todo";
 
