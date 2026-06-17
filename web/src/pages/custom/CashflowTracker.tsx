@@ -833,13 +833,17 @@ const CashflowTracker = () => {
       </div>
 
       {/* ========================= HOW TO USE ========================= */}
-      {entries.length === 0 && (
-        <div className="mt-8 bg-card border border-border rounded-xl p-6 text-center">
-          <CheckCircleIcon className="w-12 h-12 text-emerald-500/20 mx-auto mb-4" />
-          <h3 className="text-lg font-bold mb-2">Chưa có dữ liệu thu chi</h3>
-          <p className="text-sm text-muted-foreground mb-6">Bắt đầu bằng cách ghi memo kèm tag #income hoặc #expense</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left max-w-xl mx-auto">
-            <div className="p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/20">
+      <details className="mt-4 bg-card border border-border rounded-xl p-4 group cursor-pointer">
+        <summary className="font-bold text-sm flex items-center justify-between list-none select-none">
+          <span className="flex items-center gap-2">
+            <CheckCircleIcon className="w-4 h-4 text-emerald-500" /> Hướng dẫn cú pháp ghi thu chi
+          </span>
+          <span className="text-xs text-muted-foreground group-open:hidden">Xem chi tiết ▾</span>
+          <span className="text-xs text-muted-foreground hidden group-open:inline">Thu gọn ▴</span>
+        </summary>
+        <div className="space-y-4 text-sm mt-3 pt-3 border-t border-border/50 cursor-default" onClick={e => e.stopPropagation()}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left max-w-xl">
+            <div className="p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/20">
               <p className="text-xs font-bold text-emerald-500 uppercase mb-2">Ghi Thu Nhập</p>
               <code className="text-[10px] block bg-background p-2 rounded border border-border mb-2">
                 Nhận lương tháng 15tr #income
@@ -848,7 +852,7 @@ const CashflowTracker = () => {
                 Freelance dự án 5tr #income
               </code>
             </div>
-            <div className="p-4 bg-rose-500/5 rounded-xl border border-rose-500/20">
+            <div className="p-3 bg-rose-500/5 rounded-xl border border-rose-500/20">
               <p className="text-xs font-bold text-rose-500 uppercase mb-2">Ghi Chi Tiêu</p>
               <code className="text-[10px] block bg-background p-2 rounded border border-border mb-2">
                 Ăn phở sáng 45k #expense
@@ -859,7 +863,7 @@ const CashflowTracker = () => {
             </div>
           </div>
         </div>
-      )}
+      </details>
 
       {/* ========================= SHOW ZERO TOGGLE ========================= */}
       <div className="mt-4 flex items-center justify-end">

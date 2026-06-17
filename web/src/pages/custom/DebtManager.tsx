@@ -365,27 +365,29 @@ const DebtManager = () => {
       </div>
 
       {/* ========================= HOW TO USE ========================= */}
-      {debtEntries.length === 0 && (
-        <div className="mt-6 bg-card border border-border rounded-xl p-5">
-          <h3 className="font-bold text-sm mb-3 flex items-center gap-2">
-            <WalletIcon className="w-4 h-4 text-rose-500" /> Cách ghi công nợ
-          </h3>
-          <div className="space-y-3 text-sm">
-            <div>
-              <p className="font-medium text-foreground mb-1">💚 Mua hộ / Bán chịu (họ nợ mình):</p>
-              <code className="text-xs bg-muted px-2 py-1 rounded">Mua hộ Tuấn 2 ESP32 500k #debt/receivable @Tuấn</code>
-            </div>
-            <div>
-              <p className="font-medium text-foreground mb-1">🔴 Mình nợ người khác:</p>
-              <code className="text-xs bg-muted px-2 py-1 rounded">Mượn Minh 5 cuốn sách 1tr #debt/payable @Minh</code>
-            </div>
-            <div>
-              <p className="font-medium text-foreground mb-1">✅ Thanh toán / Tất toán:</p>
-              <code className="text-xs bg-muted px-2 py-1 rounded">Tuấn trả 300k #debt/settled @Tuấn</code>
-            </div>
+      <details className="mt-4 bg-card border border-border rounded-xl p-4 group cursor-pointer">
+        <summary className="font-bold text-sm flex items-center justify-between list-none select-none">
+          <span className="flex items-center gap-2">
+            <WalletIcon className="w-4 h-4 text-rose-500" /> Hướng dẫn cú pháp ghi công nợ
+          </span>
+          <span className="text-xs text-muted-foreground group-open:hidden">Xem chi tiết ▾</span>
+          <span className="text-xs text-muted-foreground hidden group-open:inline">Thu gọn ▴</span>
+        </summary>
+        <div className="space-y-3 text-sm mt-3 pt-3 border-t border-border/50 cursor-default" onClick={e => e.stopPropagation()}>
+          <div>
+            <p className="font-medium text-foreground mb-1">💚 Mua hộ / Bán chịu (họ nợ mình):</p>
+            <code className="text-xs bg-muted px-2 py-1 rounded block w-fit">Mua hộ Tuấn 2 ESP32 500k #debt/receivable @Tuấn</code>
+          </div>
+          <div>
+            <p className="font-medium text-foreground mb-1">🔴 Mình nợ người khác:</p>
+            <code className="text-xs bg-muted px-2 py-1 rounded block w-fit">Mượn Minh 5 cuốn sách 1tr #debt/payable @Minh</code>
+          </div>
+          <div>
+            <p className="font-medium text-foreground mb-1">✅ Thanh toán / Tất toán:</p>
+            <code className="text-xs bg-muted px-2 py-1 rounded block w-fit">Tuấn trả 300k #debt/settled @Tuấn</code>
           </div>
         </div>
-      )}
+      </details>
 
       {/* ========================= TRANSACTION LIST ========================= */}
       <div className="mt-4 space-y-3">
