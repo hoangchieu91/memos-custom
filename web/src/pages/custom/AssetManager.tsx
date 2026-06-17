@@ -32,7 +32,7 @@ import toast from "react-hot-toast";
 // NocoDB Config
 // ============================================================================
 
-const NOCODB_DIRECT = "http://10.25.7.212:8080";
+const NOCODB_DIRECT = `http://${window.location.hostname}:8088`;
 const NOCODB_TOKEN = "_TMGGkbPEWQa_hO82Kn3BjJi3DWbPiQDTnBumzPg";
 const NOCODB_TABLE = "mef80lq7kymhvtc";
 const NOCODB_BASE_ID = "pakf4lho7c3mxzs";
@@ -130,8 +130,7 @@ async function createAsset(asset: Partial<Asset>): Promise<Asset> {
 }
 
 async function updateAsset(id: number, asset: Partial<Asset>): Promise<Asset> {
-  const payload = { Id: id, ...asset };
-  const res = await fetch(nocoUrl(""), { method: "PATCH", headers, body: JSON.stringify(payload) });
+  const res = await fetch(nocoUrl(`/${id}`), { method: "PATCH", headers, body: JSON.stringify(asset) });
   if (!res.ok) throw new Error(`Lỗi ${res.status}`);
   return res.json();
 }

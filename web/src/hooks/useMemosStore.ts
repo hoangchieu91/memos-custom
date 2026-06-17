@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 
-const MEMOS_API = "http://10.25.7.212:5230/api/v1";
+const MEMOS_API = "/api/v1";
 const TOKEN = localStorage.getItem("memos_pat") || "";
 const STORE_TAG_PREFIX = "#_store/";
 

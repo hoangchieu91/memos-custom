@@ -10,7 +10,7 @@ const NocoDB = () => {
           NocoDB không thể nhúng iframe qua HTTPS (Mixed Content). Click bên dưới để mở trong tab mới.
         </p>
         <a
-          href="http://10.25.7.212:8080"
+          href={`http://${window.location.hostname}:8088`}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors shadow-lg"

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { XIcon, ShoppingCartIcon, SendIcon, LoaderIcon } from "lucide-react";
 import toast from "react-hot-toast";
 
-const NOCODB_DIRECT = "http://10.25.7.212:8080";
+const NOCODB_DIRECT = `http://${window.location.hostname}:8088`;
 const NOCODB_TOKEN = "_TMGGkbPEWQa_hO82Kn3BjJi3DWbPiQDTnBumzPg";
 const NOCODB_TABLE = "mef80lq7kymhvtc";
 const NOCODB_BASE_ID = "pakf4lho7c3mxzs";

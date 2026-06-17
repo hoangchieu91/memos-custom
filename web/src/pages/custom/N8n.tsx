@@ -10,7 +10,7 @@ const N8n = () => {
           n8n không thể nhúng iframe qua HTTPS (X-Frame-Options). Click bên dưới để mở trong tab mới.
         </p>
         <a
-          href="http://10.25.7.212:5678"
+          href={`http://${window.location.hostname}:5678`}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-medium transition-colors shadow-lg"
