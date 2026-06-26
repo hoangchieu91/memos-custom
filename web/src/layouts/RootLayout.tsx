@@ -30,6 +30,23 @@ const RootLayout = () => {
   const edgeTouchStartX = useRef(0);
   const edgeTouchStartY = useRef(0);
 
+  // Listen to global sidebar toggle events
+  useEffect(() => {
+    const handleToggle = () => setMobileMenuOpen(prev => !prev);
+    const handleOpen = () => setMobileMenuOpen(true);
+    const handleClose = () => setMobileMenuOpen(false);
+
+    window.addEventListener("toggle-mobile-sidebar", handleToggle);
+    window.addEventListener("open-mobile-sidebar", handleOpen);
+    window.addEventListener("close-mobile-sidebar", handleClose);
+
+    return () => {
+      window.removeEventListener("toggle-mobile-sidebar", handleToggle);
+      window.removeEventListener("open-mobile-sidebar", handleOpen);
+      window.removeEventListener("close-mobile-sidebar", handleClose);
+    };
+  }, []);
+
   // FloatingHub panel state
   const [aiOpen, setAiOpen] = useState(false);
   const [focusOpen, setFocusOpen] = useState(false);

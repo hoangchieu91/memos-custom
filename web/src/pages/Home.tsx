@@ -3,6 +3,7 @@ import MemoView from "@/components/MemoView";
 import MemoEditor from "@/components/MemoEditor";
 import PagedMemoList from "@/components/PagedMemoList";
 import PersonalDashboard from "@/components/custom/PersonalDashboard";
+import MobileHeader from "@/components/MobileHeader";
 import { useInstance } from "@/contexts/InstanceContext";
 import { useMemoFilters, useMemoSorting } from "@/hooks";
 import useCurrentUser from "@/hooks/useCurrentUser";
@@ -92,6 +93,7 @@ const Home = () => {
 
   return (
     <div className="w-full min-h-full bg-background text-foreground">
+      <MobileHeader />
       {/* Memo list — oldest at top, newest at bottom (chat-style) */}
       <PagedMemoList
         renderer={(memo: Memo) => <MemoView key={`${memo.name}-${memo.displayTime}`} memo={memo} showVisibility showPinned compact />}

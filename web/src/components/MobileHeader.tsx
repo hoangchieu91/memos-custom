@@ -19,13 +19,13 @@ const MobileHeader = (props: Props) => {
   return (
     <div
       className={cn(
-        "sticky top-0 pt-3 pb-2 sm:pt-2 px-4 sm:px-6 sm:mb-1 bg-background bg-opacity-80 backdrop-blur-lg flex flex-row justify-between items-center w-full h-auto flex-nowrap shrink-0 z-1",
-        offsetTop > 0 && "shadow-md",
+        "sticky top-0 pt-3 pb-3 sm:pt-2 px-4 sm:px-6 bg-background/80 backdrop-blur-lg flex flex-row justify-between items-center w-full h-auto flex-nowrap shrink-0 z-20 border-b border-border/40 transition-shadow duration-250",
+        offsetTop > 0 && "shadow-sm border-b-border/80",
         className,
       )}
     >
       {!sm && <NavigationDrawer />}
-      <div className="w-full flex flex-row justify-end items-center">{children}</div>
+      <div className="w-full flex flex-row justify-end items-center gap-2">{children}</div>
     </div>
   );
 };
