@@ -9,6 +9,7 @@ export const ROUTES = {
   BOARD: "/board",
   GRAPH: "/graph",
   SYSTEM: "/system",
+  CLIPBOARD: "/clipboard",
 } as const;
 
 export type RouteKey = keyof typeof ROUTES;

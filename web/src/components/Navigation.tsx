@@ -17,7 +17,7 @@ import {
   MonitorIcon, BookOpenIcon, WalletIcon, BanknoteIcon,
   BriefcaseIcon, FileTextIcon, ScrollTextIcon, ChevronDownIcon,
   ChevronsLeftIcon, ChevronsRightIcon, UsersIcon, BookmarkIcon,
-  SearchIcon, XIcon, Settings2Icon,
+  SearchIcon, XIcon, Settings2Icon, ClipboardPasteIcon,
 } from "lucide-react";
 import { useState, useCallback, useMemo } from "react";
 import { NavLink } from "react-router-dom";
@@ -199,6 +199,7 @@ const Navigation = (props: Props) => {
       defaultOpen: true,
       items: [
         { id: "header-memos", path: Routes.ROOT, title: t("common.memos"), icon: <LibraryIcon className="w-5 h-5" /> },
+        { id: "header-clipboard", path: "/clipboard", title: "Clipboard", icon: <ClipboardPasteIcon className="w-5 h-5" /> },
         { id: "header-bookmarks", path: "/bookmarks", title: "Dấu trang", icon: <BookmarkIcon className="w-5 h-5" /> },
         { id: "header-board", path: Routes.BOARD, title: "Bảng Tasks", icon: <LayoutDashboardIcon className="w-5 h-5" />, badge: doingCount },
         { id: "header-timeline", path: "/timeline", title: "Quest Timeline", icon: <SparklesIcon className="w-5 h-5" /> },

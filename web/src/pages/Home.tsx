@@ -3,7 +3,6 @@ import MemoView from "@/components/MemoView";
 import MemoEditor from "@/components/MemoEditor";
 import PagedMemoList from "@/components/PagedMemoList";
 import PersonalDashboard from "@/components/custom/PersonalDashboard";
-import StickyClipboard from "@/components/custom/StickyClipboard";
 import { useInstance } from "@/contexts/InstanceContext";
 import { useMemoFilters, useMemoSorting } from "@/hooks";
 import useCurrentUser from "@/hooks/useCurrentUser";
@@ -104,7 +103,6 @@ const Home = () => {
 
       {/* BOTTOM SECTION — Dashboard + Editor */}
       <div className="w-full max-w-full mx-auto px-2 sm:px-4 lg:px-8 mt-4 pb-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
-        <StickyClipboard />
         <PersonalDashboard />
 
         {/* Tag filter + Editor */}

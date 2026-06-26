@@ -42,6 +42,7 @@ const ProjectManager = lazyWithReload(() => import("@/pages/custom/ProjectManage
 const ContractManager = lazyWithReload(() => import("@/pages/custom/ContractManager"));
 const ContactsManager = lazyWithReload(() => import("@/pages/custom/ContactsManager"));
 const BookmarkManager = lazyWithReload(() => import("@/pages/custom/BookmarkManager"));
+const ClipboardManager = lazyWithReload(() => import("@/pages/custom/ClipboardManager"));
 const DocumentEditor = lazyWithReload(() => import("@/pages/custom/DocumentEditor"));
 const SystemSettings = lazyWithReload(() => import("@/pages/custom/SystemSettings"));
 const MemoDetail = lazyWithReload(() => import("@/pages/MemoDetail"));
@@ -99,6 +100,7 @@ const router = createBrowserRouter([
               { path: "contracts", element: <ContractManager /> },
               { path: "contacts", element: <ContactsManager /> },
               { path: "bookmarks", element: <BookmarkManager /> },
+              { path: "clipboard", element: <ClipboardManager /> },
               { path: "documents", element: <DocumentEditor /> },
               { path: "system", element: <SystemSettings /> },
             ],
