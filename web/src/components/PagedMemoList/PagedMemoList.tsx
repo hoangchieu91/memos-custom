@@ -95,10 +95,8 @@ const PagedMemoList = (props: Props) => {
   const memos = useMemo(() => data?.pages.flatMap((page) => page.memos) || [], [data]);
 
   // Apply custom sorting if provided, otherwise use memos directly
-  // REVERSE THE LIST FOR CHAT UI (Newest at bottom)
   const sortedMemoList = useMemo(() => {
-    const list = props.listSort ? props.listSort(memos) : memos;
-    return list.slice().reverse();
+    return props.listSort ? props.listSort(memos) : memos;
   }, [memos, props.listSort]);
 
   // Prefetch creators when new data arrives to improve performance
@@ -129,13 +127,13 @@ const PagedMemoList = (props: Props) => {
     onFetchNext: fetchNextPage,
   });
 
-  // Infinite scroll: fetch more when user scrolls near TOP (for chat layout)
+  // Infinite scroll: fetch more when user scrolls near BOTTOM (standard layout)
   useEffect(() => {
     if (!hasNextPage) return;
 
     const handleScroll = () => {
-      const nearTop = window.scrollY <= 300;
-      if (nearTop && !isFetchingNextPage) {
+      const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 300;
+      if (nearBottom && !isFetchingNextPage) {
         fetchNextPage();
       }
     };
@@ -144,16 +142,6 @@ const PagedMemoList = (props: Props) => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  // Auto-scroll to bottom on initial load (Page 1)
-  useEffect(() => {
-    if (sortedMemoList.length > 0 && data?.pages?.length === 1 && !isFetchingNextPage) {
-      const isMobile = window.innerWidth <= 768;
-      setTimeout(() => {
-         window.scrollTo({ top: document.body.scrollHeight, behavior: isMobile ? 'auto' : 'smooth' });
-      }, 300);
-    }
-  }, [sortedMemoList.length, data?.pages?.length, isFetchingNextPage]);
-
   const children = (
     <div className="flex flex-col justify-start items-start w-full max-w-full pb-8">
       {/* Show skeleton loader during initial load */}
@@ -161,24 +149,23 @@ const PagedMemoList = (props: Props) => {
         <Skeleton showCreator={props.showCreator} count={4} />
       ) : (
         <>
-          {/* LOAD MORE TOP: Loading indicator for pagination (Chat style) */}
-          <div className="w-full flex justify-center items-center py-4 mb-4 border-b border-border">
-            {isFetchingNextPage ? (
-               <Skeleton showCreator={props.showCreator} count={2} />
-            ) : hasNextPage ? (
-               <Button variant="ghost" onClick={() => fetchNextPage()}>Tải thêm lịch sử</Button>
-            ) : (
-               <span className="text-muted-foreground text-sm opacity-50">Hết dữ liệu lịch sử</span>
-            )}
-          </div>
-
           <MasonryView
             memoList={sortedMemoList}
             renderer={props.renderer}
             prefixElement={<MemoFilters />}
             listMode={layout === "LIST"}
           />
-        
+
+          {/* LOAD MORE BOTTOM: Loading indicator for pagination */}
+          <div className="w-full flex justify-center items-center py-6 mt-6 border-t border-border">
+            {isFetchingNextPage ? (
+               <Skeleton showCreator={props.showCreator} count={2} />
+            ) : hasNextPage ? (
+               <Button variant="ghost" onClick={() => fetchNextPage()}>Tải thêm ghi chú cũ</Button>
+            ) : (
+               <span className="text-muted-foreground text-xs opacity-50">Đã hiển thị toàn bộ ghi chú</span>
+            )}
+          </div>
         </>
       )}
     </div>
