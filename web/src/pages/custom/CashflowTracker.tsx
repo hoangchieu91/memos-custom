@@ -431,6 +431,9 @@ const CashflowTracker = () => {
   const [assetQty, setAssetQty] = useState("1");
   const [assetStatus, setAssetStatus] = useState("active");
   const [assetNotes, setAssetNotes] = useState("");
+  const [assetImages, setAssetImages] = useState("");
+  const [assetSerial, setAssetSerial] = useState("");
+  const [assetLocation, setAssetLocation] = useState("");
   const [assetSaving, setAssetSaving] = useState(false);
 
   const { data, isLoading } = useInfiniteMemos({
@@ -585,7 +588,34 @@ const CashflowTracker = () => {
     setAssetCategory("Điện tử");
     setAssetStatus("active");
     setAssetNotes("");
+    setAssetImages("");
+    setAssetSerial("");
+    setAssetLocation("");
   }, []);
+
+  // Smart Paste listener for Cashflow Asset Modal
+  useEffect(() => {
+    if (!assetModal) return;
+
+    const handlePaste = (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData("text");
+      if (!text) return;
+
+      const isPath = /^[a-zA-Z]:\\/i.test(text) || text.startsWith("/") || text.startsWith("http://") || text.startsWith("https://") || text.startsWith("file://") || text.includes("\\") || text.includes("/");
+      if (!isPath) return;
+
+      const lowerText = text.toLowerCase();
+      if (/\.(png|jpe?g|gif|webp|bmp|tiff)$/i.test(lowerText) || lowerText.includes("image") || lowerText.includes("/images/")) {
+        setAssetImages(text);
+        toast.success("Đã tự động gán đường dẫn vào Ảnh tài sản 🖼️");
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [assetModal]);
 
   const submitAssetFromCashflow = useCallback(async () => {
     if (!assetModal || !assetName.trim()) return;
@@ -599,6 +629,9 @@ const CashflowTracker = () => {
         Quantity: Number(assetQty) || 1,
         Status: assetStatus,
         Notes: assetNotes || assetModal.preview.substring(0, 200),
+        Images: assetImages.trim(),
+        Serial: assetSerial.trim(),
+        Location: assetLocation.trim(),
         MemoRef: memoRef,
         Owner: "nxchieu",
         Unit: "cái",
@@ -612,7 +645,7 @@ const CashflowTracker = () => {
     } finally {
       setAssetSaving(false);
     }
-  }, [assetModal, assetName, assetCategory, assetUnitPrice, assetPrice, assetQty, assetStatus, assetNotes]);
+  }, [assetModal, assetName, assetCategory, assetUnitPrice, assetPrice, assetQty, assetStatus, assetNotes, assetImages, assetSerial, assetLocation]);
 
 
   if (isLoading) {
@@ -681,6 +714,25 @@ const CashflowTracker = () => {
                   <input type="number" min="1" value={assetQty} onChange={e => setAssetQty(e.target.value)}
                     className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Số Serial</label>
+                  <input type="text" value={assetSerial} onChange={e => setAssetSerial(e.target.value)} placeholder="SN..."
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Vị trí</label>
+                  <input type="text" value={assetLocation} onChange={e => setAssetLocation(e.target.value)} placeholder="Văn phòng, Nhà..."
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Đường dẫn ảnh (Hỗ trợ Ctrl+V)</label>
+                <input type="text" value={assetImages} onChange={e => setAssetImages(e.target.value)} placeholder="Z:\Library\Images\a.png hoặc URL..."
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
               </div>
 
               <div>

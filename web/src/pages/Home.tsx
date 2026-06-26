@@ -52,39 +52,6 @@ const Home = () => {
     state: State.NORMAL,
   });
 
-  // Auto-scroll to bottom: use MutationObserver to detect when DOM is rendered
-  useEffect(() => {
-    if (hasScrolled.current || !isInitialized) return;
-
-    const observer = new MutationObserver(() => {
-      // Check if memo content has been rendered (look for memo cards)
-      const memoCards = document.querySelectorAll('[data-memo-id]');
-      if (memoCards.length > 0) {
-        observer.disconnect();
-        requestAnimationFrame(() => {
-          window.scrollTo({ top: document.body.scrollHeight, behavior: "auto" });
-          hasScrolled.current = true;
-        });
-      }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    // Fallback: scroll after 1.5s even if observer doesn't fire
-    const fallback = setTimeout(() => {
-      if (!hasScrolled.current) {
-        observer.disconnect();
-        window.scrollTo({ top: document.body.scrollHeight, behavior: "auto" });
-        hasScrolled.current = true;
-      }
-    }, 1500);
-
-    return () => {
-      observer.disconnect();
-      clearTimeout(fallback);
-    };
-  }, [isInitialized]);
-
   const filterButtons: { key: TagFilterMode; label: string; icon: string }[] = [
     { key: "all", label: "Tất cả", icon: "📋" },
     { key: "mine", label: "Của tôi", icon: "👤" },
@@ -94,17 +61,9 @@ const Home = () => {
   return (
     <div className="w-full min-h-full bg-background text-foreground">
       <MobileHeader />
-      {/* Memo list — oldest at top, newest at bottom (chat-style) */}
-      <PagedMemoList
-        renderer={(memo: Memo) => <MemoView key={`${memo.name}-${memo.displayTime}`} memo={memo} showVisibility showPinned compact />}
-        listSort={listSort}
-        orderBy={orderBy}
-        filter={memoFilter}
-        enabled={isInitialized}
-      />
 
-      {/* BOTTOM SECTION — Dashboard + Editor */}
-      <div className="w-full max-w-full mx-auto px-2 sm:px-4 lg:px-8 mt-4 pb-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
+      {/* TOP SECTION — Dashboard + Editor */}
+      <div className="w-full max-w-full mx-auto px-2 sm:px-4 lg:px-8 mt-4 pb-4 animate-in fade-in duration-500">
         <PersonalDashboard />
 
         {/* Tag filter + Editor */}
@@ -134,6 +93,15 @@ const Home = () => {
           />
         </div>
       </div>
+
+      {/* Memo list */}
+      <PagedMemoList
+        renderer={(memo: Memo) => <MemoView key={`${memo.name}-${memo.displayTime}`} memo={memo} showVisibility showPinned compact />}
+        listSort={listSort}
+        orderBy={orderBy}
+        filter={memoFilter}
+        enabled={isInitialized}
+      />
     </div>
   );
 };

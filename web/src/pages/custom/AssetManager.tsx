@@ -876,9 +876,21 @@ const AssetManager = () => {
             return (
               <div key={a.Id} className="bg-card border border-border rounded-xl px-4 py-3 hover:border-emerald-500/20 transition-colors group">
                 <div className="flex items-start gap-3">
-                  {/* Avatar */}
-                  <div className={`w-10 h-10 rounded-lg ${st.bg} ${st.color} flex items-center justify-center flex-shrink-0`}>
-                    <PackageIcon className="w-5 h-5" />
+                  {/* Avatar or Image Preview */}
+                  <div className="w-10 h-10 rounded-lg overflow-hidden border border-border/80 bg-muted flex items-center justify-center flex-shrink-0 relative">
+                    {a.Images ? (
+                      <img
+                        src={a.Images.startsWith("http") ? a.Images : `file:///${a.Images.replace(/\\/g, "/")}`}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const fallbackIcon = e.currentTarget.parentElement?.querySelector(".fallback-icon");
+                          if (fallbackIcon) fallbackIcon.classList.remove("hidden");
+                        }}
+                      />
+                    ) : null}
+                    <PackageIcon className={`w-5 h-5 text-emerald-500 fallback-icon ${a.Images ? "hidden" : ""}`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     {/* Row 1: Name + Status + Price */}
