@@ -8,12 +8,19 @@ import {
   UserIcon,
   WalletIcon,
   AlertTriangleIcon,
+  PencilIcon,
+  Trash2Icon,
+  ExternalLinkIcon,
+  CheckSquareIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import dayjs from "dayjs";
-import { useInfiniteMemos } from "@/hooks/useMemoQueries";
+import { useInfiniteMemos, useCreateMemo, useUpdateMemo, memoKeys } from "@/hooks/useMemoQueries";
 import { State } from "@/types/proto/api/v1/common_pb";
+import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 
 // ============================================================================
 // Parsing Utilities
@@ -87,6 +94,7 @@ function formatVND(amount: number): string {
 
 interface DebtEntry {
   uid: string;
+  memoName: string;
   content: string;
   date: string;
   dateObj: Date;
@@ -116,9 +124,64 @@ type TabType = "all" | "receivable" | "payable" | "settled";
 // ============================================================================
 
 const DebtManager = () => {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const createMemo = useCreateMemo();
+  const updateMemo = useUpdateMemo();
+
   const [tab, setTab] = useState<TabType>("all");
   const [search, setSearch] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
+
+  const handleSettleEntry = async (entry: DebtEntry) => {
+    const isReceivable = entry.type === "receivable";
+    const defaultContent = isReceivable
+      ? `@${entry.person} trả tất toán ${formatVND(entry.amount)} cho: ${entry.preview} #debt/settled @${entry.person}`
+      : `Trả tất toán ${formatVND(entry.amount)} cho @${entry.person}: ${entry.preview} #debt/settled @${entry.person}`;
+    
+    const content = prompt("Nhập nội dung ghi chú tất toán:", defaultContent);
+    if (content === null) return;
+    try {
+      await createMemo.mutateAsync({ content } as any);
+      queryClient.invalidateQueries({ queryKey: memoKeys.all });
+      toast.success("✅ Ghi nhận tất toán thành công!");
+    } catch (err) {
+      toast.error("Lỗi khi tất toán: " + err);
+    }
+  };
+
+  const handleSettlePerson = async (person: PersonSummary) => {
+    if (person.balance === 0) return;
+    const isReceivable = person.balance > 0;
+    const absVal = Math.abs(person.balance);
+    const defaultContent = isReceivable
+      ? `@${person.name} trả tất toán toàn bộ công nợ ${formatVND(absVal)} #debt/settled @${person.name}`
+      : `Trả tất toán toàn bộ công nợ ${formatVND(absVal)} cho @${person.name} #debt/settled @${person.name}`;
+      
+    const content = prompt("Nhập nội dung tất toán toàn bộ:", defaultContent);
+    if (content === null) return;
+    try {
+      await createMemo.mutateAsync({ content } as any);
+      queryClient.invalidateQueries({ queryKey: memoKeys.all });
+      toast.success(`✅ Đã tất toán toàn bộ cho ${person.name}!`);
+    } catch (err) {
+      toast.error("Lỗi tất toán: " + err);
+    }
+  };
+
+  const handleDeleteEntry = async (entry: DebtEntry) => {
+    if (!confirm(`Xóa giao dịch công nợ: "${entry.preview.substring(0, 60)}"?`)) return;
+    try {
+      await updateMemo.mutateAsync({
+        update: { name: entry.memoName, state: State.ARCHIVED },
+        updateMask: ["state"],
+      });
+      queryClient.invalidateQueries({ queryKey: memoKeys.all });
+      toast.success("Đã ẩn/xóa công nợ thành công");
+    } catch (err) {
+      toast.error("Lỗi khi xóa: " + err);
+    }
+  };
 
   const { data, isLoading } = useInfiniteMemos({
     pageSize: 500,
@@ -168,6 +231,7 @@ const DebtManager = () => {
 
         return {
           uid,
+          memoName: name,
           content,
           date: dt.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }),
           dateObj: dt,
@@ -300,33 +364,44 @@ const DebtManager = () => {
           </h3>
           <div className="space-y-2">
             {personSummaries.map((person) => (
-              <button
+              <div
                 key={person.name}
-                onClick={() => setSelectedPerson(selectedPerson === person.name ? null : person.name)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border transition-all text-left ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border transition-all ${
                   selectedPerson === person.name
                     ? "border-rose-500/50 bg-rose-500/5"
                     : "border-border hover:border-rose-500/30"
                 }`}
               >
-                <div className="flex items-center gap-2">
+                <div
+                  className="flex items-center gap-2 cursor-pointer flex-1"
+                  onClick={() => setSelectedPerson(selectedPerson === person.name ? null : person.name)}
+                >
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-rose-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold">
                     {person.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <span className="text-sm font-medium">{person.name}</span>
+                    <span className="text-sm font-semibold">{person.name}</span>
                     <span className="text-[10px] text-muted-foreground ml-2">
                       {person.transactionCount} giao dịch
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   {person.isOverdue && <AlertTriangleIcon className="w-4 h-4 text-amber-500" />}
                   <span className={`text-sm font-bold ${person.balance > 0 ? "text-emerald-500" : person.balance < 0 ? "text-red-500" : "text-muted-foreground"}`}>
                     {person.balance > 0 ? `+${formatVND(person.balance)}` : person.balance < 0 ? `-${formatVND(Math.abs(person.balance))}` : "✅ Tất toán"}
                   </span>
+                  {person.balance !== 0 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleSettlePerson(person); }}
+                      className="text-[10px] bg-green-500/10 text-green-500 hover:bg-green-500/20 px-2 py-1 rounded border border-green-500/20 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
+                      title="Tất toán toàn bộ công nợ cho người này"
+                    >
+                      <CheckSquareIcon className="w-3 h-3" /> Tất toán
+                    </button>
+                  )}
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         </div>
@@ -427,6 +502,39 @@ const DebtManager = () => {
                       <span>{entry.daysAgo} ngày trước — quá hạn!</span>
                     </div>
                   )}
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/30">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/${entry.memoName}`); }}
+                      className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-600 transition-colors bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10 cursor-pointer"
+                      title="Xem ghi chú gốc"
+                    >
+                      <ExternalLinkIcon className="w-3 h-3" /> Xem gốc
+                    </button>
+                    {!isSettled && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleSettleEntry(entry); }}
+                        className="flex items-center gap-1 text-[10px] text-green-500 hover:text-green-600 transition-colors bg-green-500/5 px-2 py-0.5 rounded border border-green-500/10 cursor-pointer"
+                        title="Tất toán giao dịch này"
+                      >
+                        <CheckCircleIcon className="w-3 h-3" /> Tất toán
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/${entry.memoName}`); }}
+                      className="flex items-center gap-1 text-[10px] text-amber-500 hover:text-amber-600 transition-colors bg-amber-500/5 px-2 py-0.5 rounded border border-amber-500/10 cursor-pointer"
+                      title="Sửa ghi chú"
+                    >
+                      <PencilIcon className="w-3 h-3" /> Sửa
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteEntry(entry); }}
+                      className="flex items-center gap-1 text-[10px] text-rose-400 hover:text-rose-600 transition-colors bg-rose-500/5 px-2 py-0.5 rounded border border-rose-500/10 cursor-pointer"
+                      title="Xóa công nợ này"
+                    >
+                      <Trash2Icon className="w-3 h-3" /> Xóa
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

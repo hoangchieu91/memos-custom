@@ -34,14 +34,19 @@ export const EditorContent = forwardRef<EditorRefActions, EditorContentProps>(({
     if (!clipboard) return;
 
     const files: File[] = [];
-    if (clipboard.items && clipboard.items.length > 0) {
+    
+    // Check clipboard.files first (most reliable for files copied from Finder/Explorer)
+    if (clipboard.files && clipboard.files.length > 0) {
+      files.push(...Array.from(clipboard.files));
+    }
+    
+    // Fallback to clipboard.items
+    if (files.length === 0 && clipboard.items && clipboard.items.length > 0) {
       for (const item of Array.from(clipboard.items)) {
         if (item.kind !== "file") continue;
         const file = item.getAsFile();
         if (file) files.push(file);
       }
-    } else if (clipboard.files && clipboard.files.length > 0) {
-      files.push(...Array.from(clipboard.files));
     }
 
     if (files.length === 0) return;

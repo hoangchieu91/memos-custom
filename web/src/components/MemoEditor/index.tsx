@@ -224,21 +224,24 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
 
         {/* Auto-tag suggestions */}
         {visibleTags.length > 0 && (
-          <div className="w-full flex items-center gap-1.5 flex-wrap px-1">
+          <div className="w-full flex items-center gap-2 flex-wrap px-1">
             <SparklesIcon className="w-3.5 h-3.5 text-violet-500 shrink-0" />
-            <span className="text-[10px] text-violet-500 font-medium">Auto-tag:</span>
+            <span className="text-[10px] text-violet-600 dark:text-violet-400 font-semibold">Tự động gán:</span>
             {visibleTags.map((tag) => (
-              <button
+              <div
                 key={tag}
-                onClick={() => handleAcceptTag(tag)}
-                className="group/tag flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs bg-violet-500/10 text-violet-500 hover:bg-violet-500/20 transition-colors border border-violet-500/20"
+                className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 font-medium"
               >
                 {tag}
-                <XIcon
-                  className="w-3 h-3 opacity-0 group-hover/tag:opacity-100 hover:text-red-400 transition-opacity"
-                  onClick={(e) => { e.stopPropagation(); handleDismissTag(tag); }}
-                />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleDismissTag(tag)}
+                  className="hover:bg-violet-200 dark:hover:bg-violet-900/50 p-0.5 rounded transition-colors text-violet-500 hover:text-rose-500 cursor-pointer"
+                  title="Không dùng tag này"
+                >
+                  <XIcon className="w-3 h-3" />
+                </button>
+              </div>
             ))}
           </div>
         )}
