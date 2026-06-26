@@ -913,7 +913,7 @@ const CashflowTracker = () => {
                     <ExternalLinkIcon className="w-3 h-3 text-muted-foreground/50" />
                   </p>
                   {/* Action buttons — visible on hover */}
-                  <div className="flex items-center gap-2 mt-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-2 mt-2 opacity-100 md:opacity-60 md:group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={(e) => { e.stopPropagation(); goToMemo(entry.memoName); }}
                       className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-600 transition-colors bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10"

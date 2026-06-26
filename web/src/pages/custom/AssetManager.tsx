@@ -695,7 +695,7 @@ const AssetManager = () => {
 
       {/* ========================= TABS + SEARCH ========================= */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm pb-3 pt-1 -mx-4 px-4 border-b border-border/50">
-        <div className="flex items-center gap-2 flex-wrap mb-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-2 no-scrollbar flex-nowrap shrink-0">
           {([
             { key: "all" as FilterTab, label: "Tất cả", count: stats.total },
             { key: "active" as FilterTab, label: "Đang dùng", count: stats.active },
@@ -705,7 +705,7 @@ const AssetManager = () => {
             { key: "broken" as FilterTab, label: "Hỏng", count: stats.broken },
           ]).map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
-              className={`px-3 py-1.5 text-xs rounded-full border transition-all ${tab === t.key ? "bg-emerald-500 text-white border-emerald-500" : "bg-card text-muted-foreground border-border hover:border-emerald-500/50"}`}>
+              className={`px-3 py-1.5 text-xs rounded-full border transition-all shrink-0 ${tab === t.key ? "bg-emerald-500 text-white border-emerald-500 font-semibold" : "bg-card text-muted-foreground border-border hover:border-emerald-500/50"}`}>
               {t.label} ({t.count})
             </button>
           ))}
@@ -784,7 +784,7 @@ const AssetManager = () => {
                       <td className="px-3 py-2 text-xs text-right font-semibold text-emerald-500">{a.Price > 0 ? formatVND(a.Price * (a.Quantity || 1)) : "—"}</td>
                       <td className="px-3 py-2 text-xs text-muted-foreground max-w-[200px] truncate" title={a.Notes}>{a.Notes || "—"}</td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                           <button onClick={() => { setMergeAsset(a); setMergeTargetId(""); }} className="p-1 text-amber-500 hover:text-amber-600 rounded" title="Gộp lô">
                             <CombineIcon className="w-3.5 h-3.5" />
                           </button>
@@ -882,8 +882,7 @@ const AssetManager = () => {
                       </div>
                     )}
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border opacity-0 group-hover:opacity-100 transition-opacity flex-wrap">
+                    <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex-wrap">
                       <button onClick={() => { setMergeAsset(a); setMergeTargetId(""); }} className="text-xs flex items-center gap-1 text-amber-500 hover:text-amber-600 font-medium whitespace-nowrap" title="Gộp vào lô khác">
                         <CombineIcon className="w-3.5 h-3.5" /> Gộp lô
                       </button>
