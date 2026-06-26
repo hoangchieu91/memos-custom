@@ -208,6 +208,53 @@ const AssetManager = () => {
     return () => clearTimeout(t);
   }, [search, loadAssets]);
 
+  // Smart Paste Handler
+  useEffect(() => {
+    if (!quickAction) return;
+
+    const handlePaste = (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData("text");
+      if (!text) return;
+
+      // Check if it's a filepath or URL
+      const isPath = /^[a-zA-Z]:\\/i.test(text) || text.startsWith("/") || text.startsWith("http://") || text.startsWith("https://") || text.startsWith("file://") || text.includes("\\") || text.includes("/");
+      if (!isPath) return;
+
+      const lowerText = text.toLowerCase();
+      let matched = false;
+
+      if (/\.(png|jpe?g|gif|webp|bmp|tiff)$/i.test(lowerText) || lowerText.includes("image") || lowerText.includes("/images/")) {
+        setFImages(text);
+        toast.success("Đã tự động gán đường dẫn vào Ảnh 🖼️");
+        matched = true;
+      } else if (lowerText.includes("manual") || lowerText.includes("guide") || lowerText.includes("hdsd") || lowerText.includes("/manuals/")) {
+        setFManuals(text);
+        toast.success("Đã tự động gán đường dẫn vào Manual 📖");
+        matched = true;
+      } else if (lowerText.includes("catalog") || lowerText.includes("brochure") || lowerText.includes("/catalogs/")) {
+        setFCatalogs(text);
+        toast.success("Đã tự động gán đường dẫn vào Catalog 📚");
+        matched = true;
+      } else if (lowerText.includes("spec") || lowerText.includes("datasheet") || lowerText.includes("drawing") || lowerText.includes("banve") || lowerText.includes("/specs/")) {
+        setFSpecs(text);
+        toast.success("Đã tự động gán đường dẫn vào Specs ⚙️");
+        matched = true;
+      } else if (lowerText.endsWith(".pdf") || lowerText.endsWith(".doc") || lowerText.endsWith(".docx")) {
+        setFManuals(text);
+        toast.success("Đã gán tài liệu vào mục Hướng dẫn (Manual) 📄");
+        matched = true;
+      }
+
+      if (matched) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [quickAction]);
+
   // Unique device names for autocomplete
   const deviceNames = useMemo(() => {
     const names = new Set(assets.map(a => a.Name).filter(Boolean));
