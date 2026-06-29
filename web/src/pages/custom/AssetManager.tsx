@@ -275,6 +275,7 @@ const AssetManager = () => {
   // Quick action modal
   const [quickAction, setQuickAction] = useState<QuickAction>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [viewingAsset, setViewingAsset] = useState<Asset | null>(null);
 
   // Form fields
   const [fName, setFName] = useState("");
@@ -662,6 +663,179 @@ const AssetManager = () => {
   return (
     <div className="w-full min-h-screen bg-background text-foreground px-4 py-6 max-w-full mx-auto">
       
+      {/* ========================= VIEW ASSET DETAIL MODAL ========================= */}
+      {viewingAsset && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 my-8">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/20">
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold text-foreground">Chi tiết thiết bị</span>
+                <span className={`text-xs px-2 py-0.5 rounded font-semibold ${STATUS_CONFIG[viewingAsset.Status]?.bg || 'bg-muted'} ${STATUS_CONFIG[viewingAsset.Status]?.color || 'text-muted-foreground'}`}>
+                  {STATUS_CONFIG[viewingAsset.Status]?.label || viewingAsset.Status}
+                </span>
+              </div>
+              <button onClick={() => setViewingAsset(null)} className="p-1.5 hover:bg-muted rounded-full transition-colors">
+                <XIcon className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+                {/* Left Column: Big Image Preview */}
+                <div className="md:col-span-2 flex flex-col items-center justify-start gap-4">
+                  <div className="w-full aspect-square rounded-2xl overflow-hidden border border-border bg-muted/30 flex items-center justify-center relative shadow-inner group">
+                    {viewingAsset.Images ? (
+                      <img
+                        src={getImgSrc(viewingAsset.Images)}
+                        alt={viewingAsset.Name}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const fallback = e.currentTarget.parentElement?.querySelector(".view-fallback");
+                          if (fallback) fallback.classList.remove("hidden");
+                        }}
+                      />
+                    ) : null}
+                    <PackageIcon className={`w-20 h-20 text-emerald-500/80 view-fallback ${viewingAsset.Images ? "hidden" : ""}`} />
+                  </div>
+                  {viewingAsset.Images && (
+                    <a href={getImgSrc(viewingAsset.Images)} target="_blank" rel="noreferrer"
+                       className="text-xs flex items-center gap-1 text-emerald-500 hover:underline font-medium">
+                      <ImageIcon className="w-3.5 h-3.5" /> Xem ảnh gốc kích thước đầy đủ
+                    </a>
+                  )}
+                </div>
+
+                {/* Right Column: Info Details */}
+                <div className="md:col-span-3 space-y-4 text-sm">
+                  <div>
+                    <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-0.5">Tên thiết bị</span>
+                    <h2 className="text-lg font-bold text-foreground leading-tight">{viewingAsset.Name}</h2>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-0.5">Phân loại</span>
+                      <span className={`inline-block text-xs px-2 py-0.5 rounded text-white font-medium ${CATEGORY_COLORS[viewingAsset.Category || 'Khác'] || 'bg-gray-400'}`}>
+                        {viewingAsset.Category || 'Khác'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-0.5">Số lượng</span>
+                      <span className="font-bold text-foreground">{viewingAsset.Quantity || 1} {viewingAsset.Unit || "Cái"}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-0.5">Đơn giá</span>
+                      <span className="font-extrabold text-foreground">{viewingAsset.Price > 0 ? formatVND(viewingAsset.Price) : "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-0.5">Tổng giá trị</span>
+                      <span className="font-extrabold text-emerald-500 text-base">{viewingAsset.Price > 0 ? formatVND(viewingAsset.Price * (viewingAsset.Quantity || 1)) : "—"}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-0.5">Chủ sở hữu</span>
+                      <span className="font-medium text-foreground">{viewingAsset.Owner || "nxchieu"}</span>
+                    </div>
+                    {viewingAsset.LentTo && (
+                      <div>
+                        <span className="text-xs text-amber-500 uppercase tracking-wider font-semibold block mb-0.5">Đang cho mượn</span>
+                        <span className="font-bold text-amber-500">{viewingAsset.LentTo}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-0.5">Số Serial</span>
+                      <span className="font-mono text-xs text-foreground bg-muted/60 px-1.5 py-0.5 rounded">{viewingAsset.Serial || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-0.5">Địa chỉ MAC</span>
+                      <span className="font-mono text-xs text-foreground bg-muted/60 px-1.5 py-0.5 rounded">{viewingAsset.MAC || "—"}</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-0.5">Vị trí hiện tại</span>
+                    <span className="font-medium text-foreground">{viewingAsset.Location || "—"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {viewingAsset.Notes && (
+                <div className="border-t border-border pt-4">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-1">Ghi chú & Lịch sử</span>
+                  <div className="bg-muted/30 border border-border/80 rounded-xl p-3 text-xs text-foreground whitespace-pre-wrap leading-relaxed max-h-[150px] overflow-y-auto">
+                    {viewingAsset.Notes}
+                  </div>
+                </div>
+              )}
+
+              {/* Thư viện 4TB Documents */}
+              {(viewingAsset.Catalogs || viewingAsset.Manuals || viewingAsset.Specs) && (
+                <div className="border-t border-border pt-4">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-2">Thư viện Tài liệu 4TB (Z:\Library)</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {viewingAsset.Catalogs && (
+                      <a href={viewingAsset.Catalogs.startsWith("http") ? viewingAsset.Catalogs : `file:///${viewingAsset.Catalogs.replace(/\\/g, "/")}`} target="_blank" rel="noreferrer"
+                         className="flex items-center gap-2 justify-center bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 text-xs py-2 px-3 rounded-lg font-medium transition-colors border border-blue-500/10">
+                        <BookIcon className="w-3.5 h-3.5" /> Mở Catalog
+                      </a>
+                    )}
+                    {viewingAsset.Manuals && (
+                      <a href={viewingAsset.Manuals.startsWith("http") ? viewingAsset.Manuals : `file:///${viewingAsset.Manuals.replace(/\\/g, "/")}`} target="_blank" rel="noreferrer"
+                         className="flex items-center gap-2 justify-center bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 text-xs py-2 px-3 rounded-lg font-medium transition-colors border border-emerald-500/10">
+                        <BookOpenIcon className="w-3.5 h-3.5" /> Hướng dẫn (Manual)
+                      </a>
+                    )}
+                    {viewingAsset.Specs && (
+                      <a href={viewingAsset.Specs.startsWith("http") ? viewingAsset.Specs : `file:///${viewingAsset.Specs.replace(/\\/g, "/")}`} target="_blank" rel="noreferrer"
+                         className="flex items-center gap-2 justify-center bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 text-xs py-2 px-3 rounded-lg font-medium transition-colors border border-amber-500/10">
+                        <FileTextIcon className="w-3.5 h-3.5" /> Bản vẽ & Specs
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted/20">
+              {viewingAsset.MemoRef && (
+                <a href={`/memos/${viewingAsset.MemoRef.split(",")[0].trim().replace("memos/", "")}`}
+                   className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground font-medium border border-border rounded-lg px-3 py-2 bg-card hover:bg-muted/50 transition-colors mr-auto">
+                  <ExternalLinkIcon className="w-3.5 h-3.5" /> Xem ghi chú gốc (Memo)
+                </a>
+              )}
+              <button
+                onClick={() => {
+                  startEdit(viewingAsset);
+                  setViewingAsset(null);
+                }}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-semibold shadow transition-colors flex items-center gap-1.5"
+              >
+                <PencilIcon className="w-3.5 h-3.5" /> Chỉnh sửa thiết bị
+              </button>
+              <button
+                onClick={() => setViewingAsset(null)}
+                className="px-4 py-2 bg-card hover:bg-muted border border-border text-foreground rounded-lg text-xs font-semibold transition-colors"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ========================= SPLIT ASSET MODAL ========================= */}
       {splitAsset && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -996,7 +1170,7 @@ const AssetManager = () => {
                           <div className={`w-7 h-7 rounded ${st.bg} ${st.color} flex items-center justify-center flex-shrink-0`}>
                             <PackageIcon className="w-3.5 h-3.5" />
                           </div>
-                          <span className="font-medium truncate max-w-[200px]" title={a.Name}>{a.Name}</span>
+                          <span onClick={() => setViewingAsset(a)} className="font-medium truncate max-w-[200px] hover:text-emerald-500 hover:underline cursor-pointer transition-colors" title="Click để xem chi tiết">{a.Name}</span>
                         </div>
                       </td>
                       <td className="px-3 py-2 text-muted-foreground text-xs font-mono">{a.Serial || "—"}</td>
@@ -1063,12 +1237,8 @@ const AssetManager = () => {
                 <div className="flex items-start gap-4">
                   {/* Image Preview (Larger for visibility) */}
                   <div className="w-20 h-20 rounded-xl overflow-hidden border border-border/80 bg-muted/50 flex items-center justify-center flex-shrink-0 relative shadow-inner cursor-pointer"
-                       title="Click để xem ảnh lớn"
-                       onClick={() => {
-                         if (a.Images) {
-                           window.open(getImgSrc(a.Images), "_blank");
-                         }
-                       }}>
+                       title="Click để xem chi tiết"
+                       onClick={() => setViewingAsset(a)}>
                     {a.Images ? (
                       <img
                         src={getImgSrc(a.Images)}
@@ -1087,7 +1257,9 @@ const AssetManager = () => {
                     {/* Row 1: Name + Status + Price */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-bold truncate text-foreground group-hover:text-emerald-500 transition-colors">{a.Name} {a.Quantity > 1 ? `(x${a.Quantity} ${a.Unit || ''})` : ""}</span>
+                        <span onClick={() => setViewingAsset(a)} className="text-sm font-bold truncate text-foreground hover:text-emerald-500 hover:underline cursor-pointer transition-colors" title="Click để xem chi tiết">
+                          {a.Name} {a.Quantity > 1 ? `(x${a.Quantity} ${a.Unit || ''})` : ""}
+                        </span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${st.bg} ${st.color} font-semibold`}>{st.label}</span>
                       </div>
                       {a.Price > 0 && <span className="text-sm font-extrabold text-emerald-500 flex-shrink-0" title={`Đơn giá: ${formatVND(a.Price)}`}>{formatVND(a.Price * (a.Quantity || 1))}</span>}
