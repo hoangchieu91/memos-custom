@@ -526,7 +526,7 @@ const AssetManager = () => {
       // Parse ảnh
       const attachmentUrls = (memo.resources || [])
         .filter((att: any) => att.type && att.type.startsWith("image/"))
-        .map((att: any) => `/file/${att.name}`);
+        .map((att: any) => `/file/${att.name}/${att.filename || "image.png"}`);
 
       const paths = content.match(/(?:[a-zA-Z]:\\[^\s\n]+|[^\s\n]+\.(?:png|jpe?g|gif|webp|pdf|docx|zip|xlsx))/gi) || [];
       const allPaths = [...attachmentUrls, ...paths];

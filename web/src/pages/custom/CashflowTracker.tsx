@@ -618,7 +618,7 @@ const CashflowTracker = () => {
     // Lấy ảnh từ attachments
     const attachmentUrls = (entry.attachments || [])
       .filter((att: any) => att.type && att.type.startsWith("image/"))
-      .map((att: any) => `/file/${att.name}`);
+      .map((att: any) => `/file/${att.name}/${att.filename || "image.png"}`);
 
     // Đường dẫn ảnh từ regex
     const paths = entry.content.match(/(?:[a-zA-Z]:\\[^\s\n]+|[^\s\n]+\.(?:png|jpe?g|gif|webp|pdf|docx|zip|xlsx))/gi) || [];
@@ -648,7 +648,7 @@ const CashflowTracker = () => {
     // Lấy ảnh từ attachments
     const attachmentUrls = (entry.attachments || [])
       .filter((att: any) => att.type && att.type.startsWith("image/"))
-      .map((att: any) => `/file/${att.name}`);
+      .map((att: any) => `/file/${att.name}/${att.filename || "image.png"}`);
 
     // Đường dẫn ảnh từ regex
     const paths = entry.content.match(/(?:[a-zA-Z]:\\[^\s\n]+|[^\s\n]+\.(?:png|jpe?g|gif|webp|pdf|docx|zip|xlsx))/gi) || [];
