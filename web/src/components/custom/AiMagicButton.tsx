@@ -65,8 +65,12 @@ export const AiMagicButton = ({ content, memoName }: AiMagicButtonProps) => {
       setIsLoading(true);
       setResult(null);
 
+      const GEMINI_API_KEY = "AIzaSyBn6rfEosMgL24j88rJ2aEAsOdzvSqlqUo";
+      let res: Response | null = null;
+      let isOllama = false;
+
       try {
-        const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+        res = await fetch(`${OLLAMA_URL}/api/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -74,14 +78,51 @@ export const AiMagicButton = ({ content, memoName }: AiMagicButtonProps) => {
             messages: [{ role: "user", content: action.prompt + content }],
             stream: true,
           }),
+          signal: AbortSignal.timeout(2000), // Quick timeout to fallback fast
         });
 
-        if (!res.ok || !res.body) {
-          setResult("🏖️ Nhân viên AI đang nghỉ phép! (Máy local chưa bật Ollama)");
-          setIsLoading(false);
-          return;
+        if (res.ok && res.body) {
+          isOllama = true;
         }
+      } catch (e) {
+        // Ollama connection failed or timed out, fallback to Gemini
+      }
 
+      if (!isOllama) {
+        try {
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+          const geminiRes = await fetch(geminiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: action.prompt + content }] }]
+            })
+          });
+
+          if (!geminiRes.ok) {
+            setResult("🏖️ Nhân viên AI đang nghỉ phép! (Không kết nối được cả Ollama & Gemini)");
+            setIsLoading(false);
+            return;
+          }
+
+          const data = await geminiRes.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          if (text) {
+            setResult(text);
+          } else {
+            setResult("🏖️ Nhân viên AI đang nghỉ phép! (Gemini trả về nội dung rỗng)");
+          }
+        } catch (geminiError) {
+          setResult("🏖️ Nhân viên AI đang nghỉ phép! (Lỗi gọi Gemini)");
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      // If Ollama is working, stream from it as usual
+      try {
+        if (!res || !res.body) return;
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let fullText = "";
@@ -103,7 +144,7 @@ export const AiMagicButton = ({ content, memoName }: AiMagicButtonProps) => {
           }
         }
       } catch {
-        setResult("🏖️ Nhân viên AI đang nghỉ phép! (Không thể kết nối Ollama)");
+        setResult("🏖️ Nhân viên AI đang nghỉ phép! (Lỗi luồng stream Ollama)");
       } finally {
         setIsLoading(false);
       }

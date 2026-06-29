@@ -24,7 +24,7 @@ import {
   ZapIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
@@ -405,6 +405,7 @@ interface CashflowEntry {
   category: CategoryKey;
   preview: string;
   tags: string[];
+  attachments?: any[];
 }
 
 type TabType = "all" | "income" | "expense";
@@ -435,6 +436,26 @@ const CashflowTracker = () => {
   const [assetSerial, setAssetSerial] = useState("");
   const [assetLocation, setAssetLocation] = useState("");
   const [assetSaving, setAssetSaving] = useState(false);
+  const [existingAssets, setExistingAssets] = useState<any[]>([]);
+  const [modalTab, setModalTab] = useState<"create" | "update">("create");
+  const [selectedAssetId, setSelectedAssetId] = useState<string>("");
+  const [assetSearchQuery, setAssetSearchQuery] = useState("");
+
+  const loadExistingAssets = useCallback(async () => {
+    try {
+      const res = await fetch(nocoUrl("?limit=500&sort=-CreatedAt"), { headers: nocoHeaders });
+      if (res.ok) {
+        const data = await res.json();
+        setExistingAssets(data.list || []);
+      }
+    } catch (e) {
+      console.error("Không tải được danh sách tài sản:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadExistingAssets();
+  }, [loadExistingAssets]);
 
   const { data, isLoading } = useInfiniteMemos({
     pageSize: 500,
@@ -490,6 +511,7 @@ const CashflowTracker = () => {
           category: detectCategory(content, tags, type),
           preview,
           tags,
+          attachments: memo.resources || memo.attachments || [],
         };
       })
       .filter((e) => showZeroAmount || e.amount > 0);
@@ -573,6 +595,11 @@ const CashflowTracker = () => {
 
   const openAssetModal = useCallback((entry: CashflowEntry) => {
     setAssetModal(entry);
+    setModalTab("create");
+    setSelectedAssetId("");
+    setAssetSearchQuery("");
+    loadExistingAssets();
+
     // Pre-fill: extract a reasonable name from the preview  
     const cleanPreview = entry.preview
       .replace(/^(Đã mua|Mua|Đặt mua|mua)\s*/i, "")
@@ -588,9 +615,52 @@ const CashflowTracker = () => {
     setAssetCategory("Điện tử");
     setAssetStatus("active");
     setAssetNotes("");
-    setAssetImages("");
+    // Lấy ảnh từ attachments
+    const attachmentUrls = (entry.attachments || [])
+      .filter((att: any) => att.type && att.type.startsWith("image/"))
+      .map((att: any) => `/file/${att.name}`);
+
+    // Đường dẫn ảnh từ regex
+    const paths = entry.content.match(/(?:[a-zA-Z]:\\[^\s\n]+|[^\s\n]+\.(?:png|jpe?g|gif|webp|pdf|docx|zip|xlsx))/gi) || [];
+
+    const allPaths = [...attachmentUrls, ...paths];
+    if (allPaths.length > 0) {
+      setAssetImages(allPaths.join(", "));
+    } else {
+      setAssetImages("");
+    }
     setAssetSerial("");
     setAssetLocation("");
+  }, [loadExistingAssets]);
+
+  const openUpdateAssetModal = useCallback((entry: CashflowEntry, asset: any) => {
+    setAssetModal(entry);
+    setModalTab("update");
+    setSelectedAssetId(String(asset.Id));
+    setAssetSearchQuery(asset.Name || "");
+    
+    // Điền sẵn số tiền và số lượng từ ghi chú mới nhất của Cashflow
+    const pd = parsePriceDetails(entry.content);
+    setAssetUnitPrice(pd.unitPrice > 0 ? String(pd.unitPrice) : "");
+    setAssetPrice(pd.total > 0 ? String(pd.total) : String(entry.amount));
+    setAssetQty(pd.quantity > 1 ? String(pd.quantity) : String(asset.Quantity || 1));
+
+    // Lấy ảnh từ attachments
+    const attachmentUrls = (entry.attachments || [])
+      .filter((att: any) => att.type && att.type.startsWith("image/"))
+      .map((att: any) => `/file/${att.name}`);
+
+    // Đường dẫn ảnh từ regex
+    const paths = entry.content.match(/(?:[a-zA-Z]:\\[^\s\n]+|[^\s\n]+\.(?:png|jpe?g|gif|webp|pdf|docx|zip|xlsx))/gi) || [];
+
+    const allPaths = [...attachmentUrls, ...paths];
+    if (allPaths.length > 0) {
+      setAssetImages(allPaths.join(", "));
+    } else {
+      setAssetImages("");
+    }
+    
+    setAssetNotes("");
   }, []);
 
   // Smart Paste listener for Cashflow Asset Modal
@@ -617,35 +687,96 @@ const CashflowTracker = () => {
     return () => window.removeEventListener("paste", handlePaste);
   }, [assetModal]);
 
+  // Tự động load lại tài sản khi danh sách memos thay đổi (đảm bảo đồng bộ realtime)
+  useEffect(() => {
+    loadExistingAssets();
+  }, [loadExistingAssets, data]);
+
   const submitAssetFromCashflow = useCallback(async () => {
-    if (!assetModal || !assetName.trim()) return;
+    if (!assetModal) return;
     setAssetSaving(true);
     try {
       const memoRef = assetModal.memoName || "";
-      const payload = {
-        Name: assetName.trim(),
-        Category: assetCategory,
-        Price: Number(assetUnitPrice) || Number(assetPrice) || 0,
-        Quantity: Number(assetQty) || 1,
-        Status: assetStatus,
-        Notes: assetNotes || assetModal.preview.substring(0, 200),
-        Images: assetImages.trim(),
-        Serial: assetSerial.trim(),
-        Location: assetLocation.trim(),
-        MemoRef: memoRef,
-        Owner: "nxchieu",
-        Unit: "cái",
-      };
-      const res = await fetch(nocoUrl(""), { method: "POST", headers: nocoHeaders, body: JSON.stringify(payload) });
-      if (!res.ok) throw new Error(`NocoDB error ${res.status}`);
-      toast.success(`📦 Đã tạo tài sản "${assetName}"`);
-      setAssetModal(null);
+
+      if (modalTab === "update") {
+        if (!selectedAssetId) {
+          toast.error("Vui lòng chọn tài sản cần cập nhật!");
+          setAssetSaving(false);
+          return;
+        }
+
+        const targetAsset = Array.isArray(existingAssets) ? existingAssets.find(a => String(a.Id) === selectedAssetId) : null;
+        if (!targetAsset) {
+          toast.error("Không tìm thấy tài sản đã chọn!");
+          setAssetSaving(false);
+          return;
+        }
+
+        // Nối hình ảnh mới
+        let finalImages = targetAsset.Images || "";
+        if (assetImages.trim()) {
+          finalImages = finalImages ? `${finalImages}, ${assetImages.trim()}` : assetImages.trim();
+        }
+
+        // Nối MemoRef
+        let finalMemoRef = targetAsset.MemoRef || "";
+        if (memoRef) {
+          finalMemoRef = finalMemoRef ? `${finalMemoRef}, ${memoRef}` : memoRef;
+        }
+
+        // Nối ghi chú mới
+        let finalNotes = targetAsset.Notes || "";
+        const incomingNotes = assetNotes.trim() || assetModal.preview.substring(0, 200);
+        if (incomingNotes) {
+          finalNotes = finalNotes ? `${finalNotes}\n---\n${incomingNotes}` : incomingNotes;
+        }
+
+        const payload = {
+          Images: finalImages,
+          MemoRef: finalMemoRef,
+          Notes: finalNotes,
+          Price: Number(assetUnitPrice) || Number(assetPrice) || targetAsset.Price || 0,
+          Quantity: Number(assetQty) || targetAsset.Quantity || 1,
+        };
+
+        const patchUrl = `${NOCODB_DIRECT}/api/v1/db/data/noco/${NOCODB_BASE_ID}/${NOCODB_TABLE}/${targetAsset.Id}`;
+        const res = await fetch(patchUrl, { 
+          method: "PATCH", 
+          headers: nocoHeaders, 
+          body: JSON.stringify(payload) 
+        });
+
+        if (!res.ok) throw new Error(`NocoDB error ${res.status}`);
+        toast.success(`✅ Đã cập nhật tài sản "${targetAsset.Name}"`);
+        setAssetModal(null);
+      } else {
+        // Tạo tài sản mới
+        if (!assetName.trim()) return;
+        const payload = {
+          Name: assetName.trim(),
+          Category: assetCategory,
+          Price: Number(assetUnitPrice) || Number(assetPrice) || 0,
+          Quantity: Number(assetQty) || 1,
+          Status: assetStatus,
+          Notes: assetNotes || assetModal.preview.substring(0, 200),
+          Images: assetImages.trim(),
+          Serial: assetSerial.trim(),
+          Location: assetLocation.trim(),
+          MemoRef: memoRef,
+          Owner: "nxchieu",
+          Unit: "cái",
+        };
+        const res = await fetch(nocoUrl(""), { method: "POST", headers: nocoHeaders, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error(`NocoDB error ${res.status}`);
+        toast.success(`📦 Đã tạo tài sản "${assetName}"`);
+        setAssetModal(null);
+      }
     } catch (err: unknown) {
-      toast.error(`Lỗi tạo tài sản: ${err instanceof Error ? err.message : "?"}`);
+      toast.error(`Lỗi: ${err instanceof Error ? err.message : "?"}`);
     } finally {
       setAssetSaving(false);
     }
-  }, [assetModal, assetName, assetCategory, assetUnitPrice, assetPrice, assetQty, assetStatus, assetNotes, assetImages, assetSerial, assetLocation]);
+  }, [assetModal, modalTab, selectedAssetId, existingAssets, assetImages, assetNotes, assetName, assetCategory, assetUnitPrice, assetPrice, assetQty, assetStatus, assetSerial, assetLocation]);
 
 
   if (isLoading) {
@@ -660,99 +791,187 @@ const CashflowTracker = () => {
     <div className="w-full min-h-screen bg-background text-foreground px-4 py-6 max-w-7xl mx-auto">
 
       {/* ========================= ASSET CREATION MODAL ========================= */}
-      {assetModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setAssetModal(null)}>
-          <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-5 overflow-hidden animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold flex items-center gap-2">
-                <PackageIcon className="w-5 h-5 text-emerald-500" /> Tạo tài sản từ thu chi
-              </h3>
-              <button onClick={() => setAssetModal(null)} className="p-1 rounded-lg hover:bg-muted text-muted-foreground">
-                <XIcon className="w-4 h-4" />
-              </button>
-            </div>
-            
-            <div className="text-xs bg-muted/50 border border-border rounded-lg p-2 mb-4 text-muted-foreground line-clamp-2">
-              📝 {assetModal.preview}
-            </div>
+      {assetModal && (() => {
+        const filteredExistingAssets = Array.isArray(existingAssets) ? existingAssets.filter(a => {
+          if (!assetSearchQuery.trim()) return true;
+          const q = assetSearchQuery.toLowerCase();
+          return (a.Name || "").toLowerCase().includes(q) || (a.Serial || "").toLowerCase().includes(q);
+        }) : [];
 
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Tên thiết bị / tài sản</label>
-                <input value={assetName} onChange={e => setAssetName(e.target.value)} placeholder="VD: ESP32-C3 DevKit"
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" autoFocus />
+        return (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setAssetModal(null)}>
+            <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-5 overflow-hidden animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <PackageIcon className="w-5 h-5 text-emerald-500" /> Liên kết Tài sản
+                </h3>
+                <button onClick={() => setAssetModal(null)} className="p-1 rounded-lg hover:bg-muted text-muted-foreground">
+                  <XIcon className="w-4 h-4" />
+                </button>
               </div>
               
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Danh mục</label>
-                  <select value={assetCategory} onChange={e => setAssetCategory(e.target.value)} className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500">
-                    {ASSET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Trạng thái</label>
-                  <select value={assetStatus} onChange={e => setAssetStatus(e.target.value)} className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500">
-                    {Object.entries(ASSET_STATUSES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
-                </div>
+              <div className="text-xs bg-muted/50 border border-border rounded-lg p-2 mb-3 text-muted-foreground line-clamp-2">
+                📝 {assetModal.preview}
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Đơn giá</label>
-                  <input type="number" value={assetUnitPrice} onChange={e => setAssetUnitPrice(e.target.value)} placeholder="0"
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Tổng tiền</label>
-                  <input type="number" value={assetPrice} onChange={e => setAssetPrice(e.target.value)} placeholder="0"
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Số lượng</label>
-                  <input type="number" min="1" value={assetQty} onChange={e => setAssetQty(e.target.value)}
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
-                </div>
+              {/* Tabs */}
+              <div className="flex border-b border-border mb-4">
+                <button
+                  onClick={() => setModalTab("create")}
+                  className={`flex-1 pb-2 text-sm font-semibold text-center border-b-2 transition-colors ${
+                    modalTab === "create" ? "border-emerald-500 text-emerald-500" : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Tạo tài sản mới
+                </button>
+                <button
+                  onClick={() => setModalTab("update")}
+                  className={`flex-1 pb-2 text-sm font-semibold text-center border-b-2 transition-colors ${
+                    modalTab === "update" ? "border-emerald-500 text-emerald-500" : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Cập nhật tài sản cũ
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Số Serial</label>
-                  <input type="text" value={assetSerial} onChange={e => setAssetSerial(e.target.value)} placeholder="SN..."
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              {modalTab === "create" ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1 block">Tên thiết bị / tài sản</label>
+                    <input value={assetName} onChange={e => setAssetName(e.target.value)} placeholder="VD: ESP32-C3 DevKit"
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" autoFocus />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">Danh mục</label>
+                      <select value={assetCategory} onChange={e => setAssetCategory(e.target.value)} className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500">
+                        {ASSET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">Trạng thái</label>
+                      <select value={assetStatus} onChange={e => setAssetStatus(e.target.value)} className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500">
+                        {Object.entries(ASSET_STATUSES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">Đơn giá</label>
+                      <input type="number" value={assetUnitPrice} onChange={e => setAssetUnitPrice(e.target.value)} placeholder="0"
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">Tổng tiền</label>
+                      <input type="number" value={assetPrice} onChange={e => setAssetPrice(e.target.value)} placeholder="0"
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">Số lượng</label>
+                      <input type="number" min="1" value={assetQty} onChange={e => setAssetQty(e.target.value)}
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">Số Serial</label>
+                      <input type="text" value={assetSerial} onChange={e => setAssetSerial(e.target.value)} placeholder="SN..."
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">Vị trí</label>
+                      <input type="text" value={assetLocation} onChange={e => setAssetLocation(e.target.value)} placeholder="Văn phòng, Nhà..."
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1 block">Đường dẫn ảnh/tài liệu (Hỗ trợ Ctrl+V)</label>
+                    <input type="text" value={assetImages} onChange={e => setAssetImages(e.target.value)} placeholder="Z:\Library\Images\a.png hoặc URL..."
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1 block">Ghi chú</label>
+                    <textarea value={assetNotes} onChange={e => setAssetNotes(e.target.value)} rows={2} placeholder="Ghi chú thêm..."
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Vị trí</label>
-                  <input type="text" value={assetLocation} onChange={e => setAssetLocation(e.target.value)} placeholder="Văn phòng, Nhà..."
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1 block">Tìm tài sản hiện có</label>
+                    <input
+                      type="text"
+                      value={assetSearchQuery}
+                      onChange={e => setAssetSearchQuery(e.target.value)}
+                      placeholder="Nhập tên hoặc Serial để lọc..."
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none mb-2"
+                    />
+                    <select
+                      value={selectedAssetId}
+                      onChange={e => setSelectedAssetId(e.target.value)}
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    >
+                      <option value="">-- Chọn tài sản cần cập nhật --</option>
+                      {filteredExistingAssets.map(a => (
+                        <option key={a.Id} value={a.Id}>
+                          {a.Name} {a.Serial ? `(S/N: ${a.Serial})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">Đơn giá mới</label>
+                      <input type="number" value={assetUnitPrice} onChange={e => setAssetUnitPrice(e.target.value)} placeholder="0"
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">Tổng tiền mới</label>
+                      <input type="number" value={assetPrice} onChange={e => setAssetPrice(e.target.value)} placeholder="0"
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">Số lượng mới</label>
+                      <input type="number" min="1" value={assetQty} onChange={e => setAssetQty(e.target.value)}
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1 block">Đường dẫn ảnh/tài liệu mới bơm (Hỗ trợ Ctrl+V)</label>
+                    <input type="text" value={assetImages} onChange={e => setAssetImages(e.target.value)} placeholder="Z:\Library\Images\a.png hoặc URL..."
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1 block">Ghi chú bổ sung</label>
+                    <textarea value={assetNotes} onChange={e => setAssetNotes(e.target.value)} rows={3} placeholder="Mô tả cập nhật thiết bị..."
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Đường dẫn ảnh (Hỗ trợ Ctrl+V)</label>
-                <input type="text" value={assetImages} onChange={e => setAssetImages(e.target.value)} placeholder="Z:\Library\Images\a.png hoặc URL..."
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              <div className="flex justify-end gap-2 mt-5 border-t border-border pt-4">
+                <button onClick={() => setAssetModal(null)} className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted font-medium transition-colors">Hủy</button>
+                <button
+                  onClick={submitAssetFromCashflow}
+                  disabled={assetSaving || (modalTab === "create" ? !assetName.trim() : !selectedAssetId)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium transition-colors shadow-md disabled:opacity-50"
+                >
+                  {assetSaving ? <LoaderIcon className="w-4 h-4 animate-spin" /> : <PackageIcon className="w-4 h-4" />}
+                  {modalTab === "create" ? "Tạo tài sản" : "Cập nhật tài sản"}
+                </button>
               </div>
-
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Ghi chú</label>
-                <textarea value={assetNotes} onChange={e => setAssetNotes(e.target.value)} rows={2} placeholder="Ghi chú thêm..."
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 mt-5 border-t border-border pt-4">
-              <button onClick={() => setAssetModal(null)} className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted font-medium transition-colors">Hủy</button>
-              <button onClick={submitAssetFromCashflow} disabled={assetSaving || !assetName.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium transition-colors shadow-md disabled:opacity-50">
-                {assetSaving ? <LoaderIcon className="w-4 h-4 animate-spin" /> : <PackageIcon className="w-4 h-4" />}
-                Tạo tài sản
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Header */}
       <div className="mb-6 flex justify-between items-center">
@@ -973,15 +1192,31 @@ const CashflowTracker = () => {
                     >
                       <ExternalLinkIcon className="w-3 h-3" /> Xem gốc
                     </button>
-                    {entry.type === "expense" && entry.amount > 0 && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openAssetModal(entry); }}
-                        className="flex items-center gap-1 text-[10px] text-emerald-500 hover:text-emerald-600 transition-colors bg-emerald-500/5 px-2 py-0.5 rounded border border-emerald-500/10"
-                        title="Tạo tài sản từ giao dịch này"
-                      >
-                        <PackageIcon className="w-3 h-3" /> Tạo tài sản
-                      </button>
-                    )}
+                    {entry.type === "expense" && entry.amount > 0 && (() => {
+                      const linkedAsset = Array.isArray(existingAssets)
+                        ? existingAssets.find((a) => a && a.MemoRef && String(a.MemoRef).includes(entry.memoName))
+                        : null;
+                      if (linkedAsset) {
+                        return (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openUpdateAssetModal(entry, linkedAsset); }}
+                            className="flex items-center gap-1 text-[10px] text-amber-500 hover:text-amber-600 transition-colors bg-amber-500/5 px-2 py-0.5 rounded border border-amber-500/10 font-bold"
+                            title={`Cập nhật tài sản: ${linkedAsset.Name}`}
+                          >
+                            <PencilIcon className="w-3 h-3 text-amber-500" /> Cập nhật tài sản
+                          </button>
+                        );
+                      }
+                      return (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openAssetModal(entry); }}
+                          className="flex items-center gap-1 text-[10px] text-emerald-500 hover:text-emerald-600 transition-colors bg-emerald-500/5 px-2 py-0.5 rounded border border-emerald-500/10"
+                          title="Tạo tài sản từ giao dịch này"
+                        >
+                          <PackageIcon className="w-3 h-3" /> Tạo tài sản
+                        </button>
+                      );
+                    })()}
                     <button
                       onClick={(e) => { e.stopPropagation(); goToMemo(entry.memoName); }}
                       className="flex items-center gap-1 text-[10px] text-amber-500 hover:text-amber-600 transition-colors"

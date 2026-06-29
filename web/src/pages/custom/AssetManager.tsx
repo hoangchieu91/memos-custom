@@ -24,9 +24,11 @@ import {
   FileTextIcon,
   SplitSquareHorizontalIcon,
   CombineIcon,
+  RefreshCwIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
+import { memoServiceClient } from "@/connect";
 
 // ============================================================================
 // NocoDB Config
@@ -82,6 +84,114 @@ function formatVND(amount: number): string {
   if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)} tr`;
   if (amount >= 1_000) return `${(amount / 1_000).toFixed(0)}k`;
   return `${amount.toLocaleString("vi-VN")}đ`;
+}
+
+function getImgSrc(path: string): string {
+  if (!path) return "";
+  const firstPath = path.split(",")[0].trim();
+  if (firstPath.startsWith("http://") || firstPath.startsWith("https://") || firstPath.startsWith("/")) {
+    return firstPath;
+  }
+  return `file:///${firstPath.replace(/\\/g, "/")}`;
+}
+
+interface PriceDetails {
+  unitPrice: number;
+  quantity: number;
+  total: number;
+}
+
+function extractAmount(text: string): number {
+  const patterns: [RegExp, number][] = [
+    [/([\d]+(?:[.,]\d+)?)\s*(?:triệu|tr)\b/i, 1_000_000],
+    [/([\d]+(?:[.,]\d+)?)\s*k\b/i, 1_000],
+    [/([\d]+(?:[.,]\d+)?)\s*(?:tỷ|ty)\b/i, 1_000_000_000],
+    [/([\d]+(?:[.,]\d+)?)\s*(?:đ|VND|vnđ|đồng)\b/i, 1],
+  ];
+  for (const [regex, multiplier] of patterns) {
+    const match = text.match(regex);
+    if (match) {
+      const numStr = match[1].replace(/,/g, ".");
+      const num = parseFloat(numStr);
+      if (!isNaN(num)) return Math.round(num * multiplier);
+    }
+  }
+  const bareMatch = text.match(/([\d]+(?:[.,]\d+)?)/);
+  if (bareMatch) {
+    const num = parseFloat(bareMatch[1].replace(/,/g, "."));
+    if (!isNaN(num) && num >= 1) {
+      if (num < 100 && /giá|tổng|chi/i.test(text)) return Math.round(num * 1000);
+      return Math.round(num);
+    }
+  }
+  return 0;
+}
+
+function parsePrice(text: string): number {
+  const unitPatterns: [RegExp, number][] = [
+    [/([\d]+(?:[.,]\d+)?)\s*(?:triệu|tr)\b/i, 1_000_000],
+    [/([\d]+(?:[.,]\d+)?)\s*k\b/i, 1_000],
+    [/([\d]+(?:[.,]\d+)?)\s*(?:tỷ|ty)\b/i, 1_000_000_000],
+  ];
+  for (const [regex, multiplier] of unitPatterns) {
+    const match = text.match(regex);
+    if (match) {
+      const numStr = match[1].replace(/,/g, ".");
+      const num = parseFloat(numStr);
+      if (!isNaN(num)) return Math.round(num * multiplier);
+    }
+  }
+  const absPatterns: [RegExp, number][] = [
+    [/([\d][\d.,]*)\s*(?:đ|VND|vnđ|đồng)/i, 1],
+    [/(?:giá|price|cost|chi phí|tổng|nhận)\s*:?\s*([\d][\d.,]*)/i, 1],
+  ];
+  for (const [regex, multiplier] of absPatterns) {
+    const match = text.match(regex);
+    if (match) {
+      const numStr = match[1].replace(/\./g, "").replace(/,/g, "");
+      const num = parseFloat(numStr);
+      if (!isNaN(num)) return Math.round(num * multiplier);
+    }
+  }
+  return 0;
+}
+
+function parsePriceDetails(text: string): PriceDetails {
+  let unitPrice = 0;
+  let quantity = 1;
+  let total = 0;
+  const lines = text.split("\n");
+  for (const line of lines) {
+    if (/^#\S+(\s+#\S+)*\s*$/.test(line.trim())) continue;
+    const totalMatch = line.match(/tổng\s*(?:cộng|tiền|:)?\s*:?\s*([\d]+(?:[.,]\d+)?)\s*(k|tr|triệu|tỷ|đ|VND|vnđ)?/i);
+    if (totalMatch) {
+      const tVal = extractAmount(totalMatch[0]);
+      if (tVal > total) total = tVal;
+    }
+    const unitMatch = line.match(/(?:đơn\s*giá|giá)\s*:?\s*([\d]+(?:[.,]\d+)?)\s*(k|tr|triệu|tỷ|đ|VND|vnđ)?/i);
+    if (unitMatch) {
+      const uVal = extractAmount(unitMatch[0].replace(/^(?:đơn\s*)?giá\s*:?\s*/i, ""));
+      if (uVal > 0 && (unitPrice === 0 || uVal > unitPrice)) unitPrice = uVal;
+    }
+    const qtyPatterns = [
+      /(?:mua|đã mua|số lượng)\s+(\d+)\s*(?:bộ|cái|chiếc|cuộn|cặp|board|module|thẻ|đầu|ổ|mặt|hạt|dây|bảng)/i,
+      /(\d+)\s*(?:bộ|cái|chiếc|cuộn|cặp|board|module|thẻ|đầu|ổ|mặt|hạt|dây|bảng)\b/i,
+    ];
+    for (const qRegex of qtyPatterns) {
+      const qMatch = line.match(qRegex);
+      if (qMatch) {
+        const q = parseInt(qMatch[1]);
+        if (q > 0 && q < 1000) quantity = Math.max(quantity, q);
+      }
+    }
+  }
+  if (unitPrice === 0 && total === 0) {
+    unitPrice = parsePrice(text);
+  }
+  if (total === 0 && unitPrice > 0 && !/đơn\s*giá/i.test(text)) {
+    total = unitPrice * quantity;
+  }
+  return { unitPrice, quantity, total };
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -216,31 +326,34 @@ const AssetManager = () => {
       const text = e.clipboardData?.getData("text");
       if (!text) return;
 
+      // Loại bỏ dấu ngoặc kép ở hai đầu (tương thích với Copy as path của Windows)
+      const cleanText = text.trim().replace(/^["']|["']$/g, "");
+
       // Check if it's a filepath or URL
-      const isPath = /^[a-zA-Z]:\\/i.test(text) || text.startsWith("/") || text.startsWith("http://") || text.startsWith("https://") || text.startsWith("file://") || text.includes("\\") || text.includes("/");
+      const isPath = /^[a-zA-Z]:\\/i.test(cleanText) || cleanText.startsWith("/") || cleanText.startsWith("http://") || cleanText.startsWith("https://") || cleanText.startsWith("file://") || cleanText.includes("\\") || cleanText.includes("/");
       if (!isPath) return;
 
-      const lowerText = text.toLowerCase();
+      const lowerText = cleanText.toLowerCase();
       let matched = false;
 
       if (/\.(png|jpe?g|gif|webp|bmp|tiff)$/i.test(lowerText) || lowerText.includes("image") || lowerText.includes("/images/")) {
-        setFImages(text);
+        setFImages(cleanText);
         toast.success("Đã tự động gán đường dẫn vào Ảnh 🖼️");
         matched = true;
       } else if (lowerText.includes("manual") || lowerText.includes("guide") || lowerText.includes("hdsd") || lowerText.includes("/manuals/")) {
-        setFManuals(text);
+        setFManuals(cleanText);
         toast.success("Đã tự động gán đường dẫn vào Manual 📖");
         matched = true;
       } else if (lowerText.includes("catalog") || lowerText.includes("brochure") || lowerText.includes("/catalogs/")) {
-        setFCatalogs(text);
+        setFCatalogs(cleanText);
         toast.success("Đã tự động gán đường dẫn vào Catalog 📚");
         matched = true;
       } else if (lowerText.includes("spec") || lowerText.includes("datasheet") || lowerText.includes("drawing") || lowerText.includes("banve") || lowerText.includes("/specs/")) {
-        setFSpecs(text);
+        setFSpecs(cleanText);
         toast.success("Đã tự động gán đường dẫn vào Specs ⚙️");
         matched = true;
       } else if (lowerText.endsWith(".pdf") || lowerText.endsWith(".doc") || lowerText.endsWith(".docx")) {
-        setFManuals(text);
+        setFManuals(cleanText);
         toast.success("Đã gán tài liệu vào mục Hướng dẫn (Manual) 📄");
         matched = true;
       }
@@ -395,7 +508,59 @@ const AssetManager = () => {
       toast.error(`Lỗi xóa: ${err instanceof Error ? err.message : "?"}`);
     }
   };
+  const syncFromMemo = async (asset: Asset) => {
+    if (!asset.MemoRef) return;
+    const toastId = toast.loading(`Đang đồng bộ dữ liệu từ ghi chú...`);
+    try {
+      // Lấy memo name đầu tiên nếu có nhiều liên kết ngăn cách bởi dấu phẩy
+      const memoName = asset.MemoRef.split(",")[0].trim();
+      const memo = await memoServiceClient.getMemo({ name: memoName });
+      if (!memo) throw new Error("Không tìm thấy ghi chú");
+      
+      // Parse content memo
+      const content = memo.content || "";
+      const pd = parsePriceDetails(content);
+      const newPrice = pd.total > 0 ? pd.total : (pd.unitPrice > 0 ? pd.unitPrice : asset.Price);
+      const newQty = pd.quantity > 1 ? pd.quantity : asset.Quantity;
+      
+      // Parse ảnh
+      const attachmentUrls = (memo.resources || [])
+        .filter((att: any) => att.type && att.type.startsWith("image/"))
+        .map((att: any) => `/file/${att.name}`);
 
+      const paths = content.match(/(?:[a-zA-Z]:\\[^\s\n]+|[^\s\n]+\.(?:png|jpe?g|gif|webp|pdf|docx|zip|xlsx))/gi) || [];
+      const allPaths = [...attachmentUrls, ...paths];
+      
+      // Nối tiếp hoặc cập nhật ảnh mới
+      let finalImages = asset.Images || "";
+      if (allPaths.length > 0) {
+        const uniquePaths = Array.from(new Set([
+          ...finalImages.split(",").map(p => p.trim()).filter(Boolean),
+          ...allPaths
+        ]));
+        finalImages = uniquePaths.join(", ");
+      }
+
+      // Notes gộp
+      let finalNotes = asset.Notes || "";
+      const newNotePart = content.replace(/#[\w\u00C0-\u024F\u1E00-\u1EFF/]+/g, "").trim().substring(0, 200);
+      if (newNotePart && !finalNotes.includes(newNotePart)) {
+        finalNotes = finalNotes ? `${finalNotes}\n---\n${newNotePart}` : newNotePart;
+      }
+
+      await updateAsset(asset.Id, {
+        Price: newPrice,
+        Quantity: newQty,
+        Images: finalImages,
+        Notes: finalNotes
+      });
+      
+      toast.success(`✅ Đồng bộ thành công tài sản từ ghi chú!`, { id: toastId });
+      loadAssets(search || undefined);
+    } catch (e: any) {
+      toast.error(`Thất bại: ${e.message}`, { id: toastId });
+    }
+  };
   const submitSplit = async () => {
     if (!splitAsset) return;
     const sq = Number(splitQty);
@@ -870,19 +1035,25 @@ const AssetManager = () => {
         </div>
       ) : (
         /* ===== CARD VIEW ===== */
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 space-y-3">
           {filtered.map(a => {
             const st = STATUS_CONFIG[a.Status] || STATUS_CONFIG.active;
             return (
-              <div key={a.Id} className="bg-card border border-border rounded-xl px-4 py-3 hover:border-emerald-500/20 transition-colors group">
-                <div className="flex items-start gap-3">
-                  {/* Avatar or Image Preview */}
-                  <div className="w-10 h-10 rounded-lg overflow-hidden border border-border/80 bg-muted flex items-center justify-center flex-shrink-0 relative">
+              <div key={a.Id} className="bg-card border border-border rounded-xl p-4 hover:border-emerald-500/20 transition-all duration-200 hover:shadow-md group">
+                <div className="flex items-start gap-4">
+                  {/* Image Preview (Larger for visibility) */}
+                  <div className="w-20 h-20 rounded-xl overflow-hidden border border-border/80 bg-muted/50 flex items-center justify-center flex-shrink-0 relative shadow-inner cursor-pointer"
+                       title="Click để xem ảnh lớn"
+                       onClick={() => {
+                         if (a.Images) {
+                           window.open(getImgSrc(a.Images), "_blank");
+                         }
+                       }}>
                     {a.Images ? (
                       <img
-                        src={a.Images.startsWith("http") ? a.Images : `file:///${a.Images.replace(/\\/g, "/")}`}
+                        src={getImgSrc(a.Images)}
                         alt=""
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                         onError={(e) => {
                           e.currentTarget.style.display = "none";
                           const fallbackIcon = e.currentTarget.parentElement?.querySelector(".fallback-icon");
@@ -890,21 +1061,21 @@ const AssetManager = () => {
                         }}
                       />
                     ) : null}
-                    <PackageIcon className={`w-5 h-5 text-emerald-500 fallback-icon ${a.Images ? "hidden" : ""}`} />
+                    <PackageIcon className={`w-8 h-8 text-emerald-500 fallback-icon ${a.Images ? "hidden" : ""}`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     {/* Row 1: Name + Status + Price */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-semibold truncate">{a.Name} {a.Quantity > 1 ? `(x${a.Quantity} ${a.Unit || ''})` : ""}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${st.bg} ${st.color} font-medium`}>{st.label}</span>
+                        <span className="text-sm font-bold truncate text-foreground group-hover:text-emerald-500 transition-colors">{a.Name} {a.Quantity > 1 ? `(x${a.Quantity} ${a.Unit || ''})` : ""}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${st.bg} ${st.color} font-semibold`}>{st.label}</span>
                       </div>
-                      {a.Price > 0 && <span className="text-xs font-bold text-emerald-500 flex-shrink-0" title={`Đơn giá: ${formatVND(a.Price)}`}>{formatVND(a.Price * (a.Quantity || 1))}</span>}
+                      {a.Price > 0 && <span className="text-sm font-extrabold text-emerald-500 flex-shrink-0" title={`Đơn giá: ${formatVND(a.Price)}`}>{formatVND(a.Price * (a.Quantity || 1))}</span>}
                     </div>
                     {/* Row 2: Serial, MAC, Location */}
-                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                       {a.Serial && (
-                        <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded flex items-center gap-0.5 text-muted-foreground">
+                        <span className="text-[10px] bg-muted px-2 py-0.5 rounded-md flex items-center gap-0.5 text-muted-foreground font-mono">
                           <HashIcon className="w-2.5 h-2.5" /> {a.Serial}
                         </span>
                       )}
@@ -934,7 +1105,7 @@ const AssetManager = () => {
                     {/* Library Links */}
                     {(a.Images || a.Catalogs || a.Manuals || a.Specs) && (
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {a.Images && <a href={a.Images.startsWith("http") ? a.Images : `file:///${a.Images.replace(/\\/g, "/")}`} target="_blank" className="text-[10px] flex items-center gap-1 text-violet-500 bg-violet-500/10 px-1.5 py-0.5 rounded font-medium hover:bg-violet-500/20"><ImageIcon className="w-3 h-3" /> Ảnh</a>}
+                        {a.Images && <a href={getImgSrc(a.Images)} target="_blank" className="text-[10px] flex items-center gap-1 text-violet-500 bg-violet-500/10 px-1.5 py-0.5 rounded font-medium hover:bg-violet-500/20"><ImageIcon className="w-3 h-3" /> Ảnh</a>}
                         {a.Catalogs && <a href={a.Catalogs.startsWith("http") ? a.Catalogs : `file:///${a.Catalogs.replace(/\\/g, "/")}`} target="_blank" className="text-[10px] flex items-center gap-1 text-blue-500 bg-blue-500/10 px-1.5 py-0.5 rounded font-medium hover:bg-blue-500/20"><BookIcon className="w-3 h-3" /> Catalog</a>}
                         {a.Manuals && <a href={a.Manuals.startsWith("http") ? a.Manuals : `file:///${a.Manuals.replace(/\\/g, "/")}`} target="_blank" className="text-[10px] flex items-center gap-1 text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded font-medium hover:bg-emerald-500/20"><BookOpenIcon className="w-3 h-3" /> Manual</a>}
                         {a.Specs && <a href={a.Specs.startsWith("http") ? a.Specs : `file:///${a.Specs.replace(/\\/g, "/")}`} target="_blank" className="text-[10px] flex items-center gap-1 text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded font-medium hover:bg-amber-500/20"><FileTextIcon className="w-3 h-3" /> Specs</a>}
@@ -964,9 +1135,14 @@ const AssetManager = () => {
                         </button>
                       )}
                       {a.MemoRef && (
-                        <a href={`/memos/${a.MemoRef.replace("memos/", "")}`} className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground whitespace-nowrap">
-                          <ExternalLinkIcon className="w-3.5 h-3.5" /> Memo
-                        </a>
+                        <>
+                          <a href={`/memos/${a.MemoRef.replace("memos/", "")}`} className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground whitespace-nowrap">
+                            <ExternalLinkIcon className="w-3.5 h-3.5" /> Memo
+                          </a>
+                          <button onClick={() => syncFromMemo(a)} className="text-xs flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-medium whitespace-nowrap" title="Đồng bộ lại thông tin và ảnh từ ghi chú">
+                            <RefreshCwIcon className="w-3.5 h-3.5 animate-hover" /> Đồng bộ từ Memo
+                          </button>
+                        </>
                       )}
                       <button onClick={() => handleDelete(a)} className="text-xs flex items-center gap-1 text-red-500 hover:text-red-600 font-medium ml-auto whitespace-nowrap">
                         <Trash2Icon className="w-3.5 h-3.5" /> Xóa

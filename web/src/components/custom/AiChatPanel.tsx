@@ -109,7 +109,7 @@ export const AiChatPanel = ({
     if (ollamaUrl) return; // already detected
     setDetecting(true);
     detectServers().then(({ ollama, qdrant }) => {
-      setOllamaUrl(ollama);
+      setOllamaUrl(ollama || "gemini"); // Fallback to 'gemini' if no local Ollama
       setQdrantUrl(qdrant);
       setDetecting(false);
       if (ollama) {
@@ -121,7 +121,7 @@ export const AiChatPanel = ({
       } else {
         setMessages([{
           role: "assistant",
-          content: `❌ Không tìm thấy Ollama ở bất kỳ địa chỉ nào:\n${OLLAMA_CANDIDATES.map(u => `• ${u}`).join("\n")}\n\nGiải pháp:\n1. Cài và chạy Ollama: https://ollama.com\n2. Chạy: \`ollama pull ${CHAT_MODEL}\`\n3. Chạy: \`ollama pull ${EMBED_MODEL}\``,
+          content: `✨ Đã tự động kết nối dự phòng tới **Google Gemini 2.0 Flash API** (Ollama offline hoặc chưa mở).\n\nHỏi bất cứ điều gì!`,
         }]);
       }
     });
@@ -136,10 +136,12 @@ export const AiChatPanel = ({
     setIsLoading(true);
     scrollToBottom();
 
+    const GEMINI_API_KEY = "AIzaSyBn6rfEosMgL24j88rJ2aEAsOdzvSqlqUo";
+
     try {
-      // Step 1: Embed + RAG search (optional, requires Qdrant)
+      // Step 1: Embed + RAG search (optional, requires Qdrant and local Ollama)
       let contextParts = "";
-      if (qdrantUrl) {
+      if (qdrantUrl && ollamaUrl !== "gemini") {
         const vector = await embedText(ollamaUrl, userMsg);
         if (vector) {
           const hits = await searchQdrant(qdrantUrl, vector, 5);
@@ -150,12 +152,48 @@ export const AiChatPanel = ({
         }
       }
 
-      // Step 2: Build system prompt
+      // Step 2: Fallback to Gemini if ollamaUrl is "gemini"
+      if (ollamaUrl === "gemini") {
+        const systemPrompt = "Bạn là trợ lý AI cá nhân. Trả lời bằng tiếng Việt, ngắn gọn, tự nhiên.";
+        const geminiMessages = [
+          {
+            role: "user",
+            parts: [{ text: systemPrompt }]
+          },
+          ...messages.filter((m) => m.role !== "system").slice(-6).map(m => ({
+            role: m.role === "assistant" ? "model" : "user",
+            parts: [{ text: m.content }]
+          })),
+          {
+            role: "user",
+            parts: [{ text: userMsg }]
+          }
+        ];
+
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+        const res = await fetch(geminiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: geminiMessages }),
+        });
+
+        if (!res.ok) {
+          setMessages((prev) => [...prev, { role: "assistant", content: `❌ Lỗi kết nối Gemini API (${res.status})` }]);
+          return;
+        }
+
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "Không có câu trả lời từ Gemini.";
+        setMessages((prev) => [...prev, { role: "assistant", content: text }]);
+        return;
+      }
+
+      // Step 3: Build system prompt for Ollama
       const systemPrompt = contextParts
         ? `Bạn là trợ lý AI cá nhân. Ghi chú liên quan:\n\n${contextParts}\n\nDựa vào ghi chú trên để trả lời. Nếu không có thông tin liên quan hãy nói rõ. Trả lời tiếng Việt, ngắn gọn.`
         : "Bạn là trợ lý AI cá nhân. Không có ghi chú liên quan. Trả lời dựa trên kiến thức chung bằng tiếng Việt.";
 
-      // Step 3: Chat
+      // Step 4: Chat with Ollama
       const ollamaMessages = [
         { role: "system", content: systemPrompt },
         ...messages.filter((m) => m.role !== "system").slice(-6),
@@ -173,7 +211,7 @@ export const AiChatPanel = ({
         return;
       }
 
-      // Step 4: Stream
+      // Step 5: Stream from Ollama
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let assistantText = "";
@@ -206,9 +244,9 @@ export const AiChatPanel = ({
     }
   }, [input, isLoading, messages, ollamaUrl, qdrantUrl, scrollToBottom]);
 
-  const statusDot = ollamaUrl
+  const statusDot = ollamaUrl && ollamaUrl !== "gemini"
     ? <WifiIcon className="w-3 h-3 text-green-400" />
-    : <WifiOffIcon className="w-3 h-3 text-red-400" />;
+    : <WifiIcon className="w-3 h-3 text-purple-400 animate-pulse" />;
 
   if (!isOpen) {
     // When externally controlled, don't render standalone FAB
