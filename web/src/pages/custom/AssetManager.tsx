@@ -88,7 +88,16 @@ function formatVND(amount: number): string {
 
 function getImgSrc(path: string): string {
   if (!path) return "";
-  const firstPath = path.split(",")[0].trim();
+  let firstPath = path.split(",")[0].trim();
+
+  // Tự động vá lỗi thiếu filename cho Memos attachment
+  if (firstPath.startsWith("/file/attachments/") || firstPath.startsWith("/file/resources/")) {
+    const parts = firstPath.split("/");
+    if (parts.length < 5) {
+      firstPath = `${firstPath}/image.png`;
+    }
+  }
+
   if (firstPath.startsWith("http://") || firstPath.startsWith("https://") || firstPath.startsWith("/")) {
     return firstPath;
   }
@@ -534,8 +543,19 @@ const AssetManager = () => {
       // Nối tiếp hoặc cập nhật ảnh mới
       let finalImages = asset.Images || "";
       if (allPaths.length > 0) {
+        const cleanOldPaths = finalImages.split(",")
+          .map(p => p.trim())
+          .filter(Boolean)
+          .map(p => {
+            if (p.startsWith("/file/attachments/") || p.startsWith("/file/resources/")) {
+              const parts = p.split("/");
+              if (parts.length < 5) return `${p}/image.png`;
+            }
+            return p;
+          });
+
         const uniquePaths = Array.from(new Set([
-          ...finalImages.split(",").map(p => p.trim()).filter(Boolean),
+          ...cleanOldPaths,
           ...allPaths
         ]));
         finalImages = uniquePaths.join(", ");
