@@ -106,6 +106,7 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
   async function handleSave() {
     // Auto-apply remaining suggested tags before save
     let contentToSave = state.content;
+    let stateToSave = state;
     if (visibleTags.length > 0) {
       const tagsToAppend = visibleTags.filter((t) => !contentToSave.includes(t));
       if (tagsToAppend.length > 0) {
@@ -114,13 +115,15 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
         if (editorRef.current) {
           editorRef.current.setContent(contentToSave);
         }
+        // Tạo bản sao state mới chứa content đã gán tag
+        stateToSave = { ...state, content: contentToSave };
         // Small delay to let state update propagate
         await new Promise((r) => setTimeout(r, 50));
       }
     }
 
     // Validate before saving
-    const { valid, reason } = validationService.canSave(state);
+    const { valid, reason } = validationService.canSave(stateToSave);
     if (!valid) {
       toast.error(reason || "Cannot save");
       return;
@@ -129,7 +132,7 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
     dispatch(actions.setLoading("saving", true));
 
     try {
-      const result = await memoService.save(state, { memoName, parentMemoName });
+      const result = await memoService.save(stateToSave, { memoName, parentMemoName });
 
       if (!result.hasChanges) {
         toast.error(t("editor.no-changes-detected"));
@@ -230,13 +233,18 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
             {visibleTags.map((tag) => (
               <div
                 key={tag}
-                className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 font-medium"
+                onClick={() => handleAcceptTag(tag)}
+                className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 font-medium cursor-pointer hover:bg-violet-500/20 transition-all active:scale-95"
+                title="Nhấp để chèn tag này vào ghi chú"
               >
                 {tag}
                 <button
                   type="button"
-                  onClick={() => handleDismissTag(tag)}
-                  className="hover:bg-violet-200 dark:hover:bg-violet-900/50 p-0.5 rounded transition-colors text-violet-500 hover:text-rose-500 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDismissTag(tag);
+                  }}
+                  className="hover:bg-violet-200 dark:hover:bg-violet-900/50 p-0.5 rounded transition-colors text-violet-500 hover:text-rose-500 cursor-pointer ml-1"
                   title="Không dùng tag này"
                 >
                   <XIcon className="w-3 h-3" />
