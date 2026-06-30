@@ -1032,9 +1032,30 @@ const AssetManager = () => {
                 </div>
                 <input placeholder="Serial Number" value={fSerial} onChange={(e) => setFSerial(e.target.value)} className="bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
                 <input placeholder="MAC Address" value={fMAC} onChange={(e) => setFMAC(e.target.value)} className="bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                <select value={fCategory} onChange={(e) => setFCategory(e.target.value)} className="bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500">
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <div className="flex flex-col gap-1">
+                  <select value={fCategory} onChange={(e) => setFCategory(e.target.value)} className="w-full bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500">
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <div className="flex flex-wrap gap-1 mt-0.5">
+                    {CATEGORIES.map(c => {
+                      const isActive = fCategory === c;
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setFCategory(c)}
+                          className={`text-[10px] px-1.5 py-0.5 rounded transition-all ${
+                            isActive 
+                              ? "bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 font-semibold" 
+                              : "bg-muted text-muted-foreground border border-border/60 hover:border-emerald-500/30"
+                          }`}
+                        >
+                          {c}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} className="bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500">
                   {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                 </select>

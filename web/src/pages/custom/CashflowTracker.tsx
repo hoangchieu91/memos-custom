@@ -199,6 +199,31 @@ function formatVND(amount: number): string {
   return `${amount.toLocaleString("vi-VN")}đ`;
 }
 
+function detectAssetCategory(content: string, tags: string[]): string {
+  const text = (content + " " + tags.join(" ")).toLowerCase();
+  
+  if (/#(?:license|software|app|key)\b/i.test(text) || /(?:key|active|phần mềm|license|premium|win11|office365)/i.test(text)) {
+    return "Phần mềm";
+  }
+  if (/#(?:car|bike|vehicle)\b/i.test(text) || /(?:xe máy|oto|ô tô|nhớt|gửi xe|lốp|săm|xăng|phụ tùng)/i.test(text)) {
+    return "Xe cộ";
+  }
+  if (/#(?:furniture)\b/i.test(text) || /(?:bàn|ghế|tủ|giường|kệ|nệm|chăn|ga|gối|đệm)/i.test(text)) {
+    return "Nội thất";
+  }
+  if (/#(?:tool|tools)\b/i.test(text) || /(?:khoan|kìm|tua vít|búa|kéo|thước|mỏ lết|ốc vít|dụng cụ|đồ nghề)/i.test(text)) {
+    return "Dụng cụ";
+  }
+  if (/#(?:office)\b/i.test(text) || /(?:giấy|bút|sổ|mực|kẹp|văn phòng phẩm|vpp)/i.test(text)) {
+    return "Văn phòng";
+  }
+  if (/#(?:tech|gear|iot|hardware|electronics)\b/i.test(text) || 
+      /(?:máy tính|router|firmware|padavan|module|4g|esp32|card|ssd|ram|cpu|mainboard|pin|sạc|cáp|màn hình|vga|gpu|switch|hub|chuột|keyboard|bàn phím|tai nghe|loa|camera|wifi|dây mạng)/i.test(text)) {
+    return "Điện tử";
+  }
+  return "Khác";
+}
+
 // ============================================================================
 // Categories
 // ============================================================================
@@ -612,7 +637,7 @@ const CashflowTracker = () => {
     setAssetUnitPrice(pd.unitPrice > 0 ? String(pd.unitPrice) : "");
     setAssetPrice(pd.total > 0 ? String(pd.total) : String(entry.amount));
     setAssetQty(pd.quantity > 1 ? String(pd.quantity) : "1");
-    setAssetCategory("Điện tử");
+    setAssetCategory(detectAssetCategory(entry.content, entry.tags));
     setAssetStatus("active");
     setAssetNotes("");
     // Lấy ảnh từ attachments
@@ -810,8 +835,30 @@ const CashflowTracker = () => {
                 </button>
               </div>
               
-              <div className="text-xs bg-muted/50 border border-border rounded-lg p-2 mb-3 text-muted-foreground line-clamp-2">
-                📝 {assetModal.preview}
+              <div className="bg-muted/40 border border-border/80 rounded-xl p-3 mb-3 text-xs">
+                <div className="text-muted-foreground font-semibold mb-0.5">Ghi chú gốc:</div>
+                <div className="text-foreground italic leading-relaxed">"{assetModal.content}"</div>
+                {assetModal.tags && assetModal.tags.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-border/50">
+                    <span className="text-muted-foreground font-semibold">Gợi ý gắn nhanh (Click để gán):</span>
+                    {assetModal.tags.map(t => {
+                      const targetCat = detectAssetCategory("", [t]);
+                      return (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => {
+                            setAssetCategory(targetCat);
+                            toast.success(`Đã gán danh mục: ${targetCat} 🏷️`);
+                          }}
+                          className="px-1.5 py-0.5 bg-background border border-border hover:border-emerald-500 rounded text-[9px] text-emerald-500 font-medium transition-colors"
+                        >
+                          {t} → {targetCat}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Tabs */}
@@ -848,6 +895,25 @@ const CashflowTracker = () => {
                       <select value={assetCategory} onChange={e => setAssetCategory(e.target.value)} className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500">
                         {ASSET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {ASSET_CATEGORIES.map(c => {
+                          const isActive = assetCategory === c;
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => setAssetCategory(c)}
+                              className={`text-[10px] px-1.5 py-0.5 rounded transition-all ${
+                                isActive 
+                                  ? "bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 font-semibold" 
+                                  : "bg-muted text-muted-foreground border border-border/60 hover:border-emerald-500/30"
+                              }`}
+                            >
+                              {c}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-muted-foreground mb-1 block">Trạng thái</label>
