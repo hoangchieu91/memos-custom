@@ -498,7 +498,12 @@ const CashflowTracker = () => {
     return allMemos
       .filter((memo) => {
         const content = memo.content || "";
-        return /#(income|expense|chi|thu|asset|inventory|tool|license|salary)/i.test(content);
+        // 1. Chứa các tag tài chính mở rộng (bao gồm tag của AI gợi ý và tag tiếng Việt/Anh)
+        const hasFinancialTag = /#(finance|money|expense|income|cost|bill|invoice|receipt|payment|chi|thu|luong|salary|buy|mua|sales|ban|revenue|asset|inventory|tool|license)/i.test(content);
+        // 2. Hoặc chứa số tiền có đơn vị rõ ràng (ví dụ: 40k, 1.2tr, 350.000 vnđ)
+        const hasFormattedAmount = /(?:[\d]+(?:[.,]\d+)?)\s*(?:triệu|tr|k|tỷ|ty|đ|VND|vnđ|đồng|usd)\b/i.test(content);
+        
+        return hasFinancialTag || hasFormattedAmount;
       })
       .map((memo) => {
         const content = memo.content || "";
